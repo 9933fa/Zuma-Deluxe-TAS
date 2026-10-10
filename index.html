@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Zuma Deluxe — 原版复刻 + Claude TAS</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+  #wrap { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+  #noassets { display: none; position: absolute; inset: 0; color: #eee; font: 16px/1.7 "Segoe UI", "Microsoft YaHei", sans-serif; padding: 40px; max-width: 760px; margin: auto; }
+  #noassets code { background: #222; padding: 2px 6px; border-radius: 4px; }
+  canvas { background: #000; image-rendering: auto; cursor: default; }
+</style>
+</head>
+<body>
+<div id="wrap"><canvas id="c" width="640" height="480"></canvas></div>
+<div id="noassets">
+  <h2>游戏素材尚未生成 / Game assets not built yet</h2>
+  <p>Zuma Deluxe 的图片、声音、关卡数据受版权保护，不包含在本仓库中。请用你自己的游戏副本生成：</p>
+  <p>The game's art, sounds and level data are copyrighted and not included in this repository. Build them from your own copy of Zuma Deluxe:</p>
+  <p><code>python tools/build_assets.py --game "&lt;Zuma Deluxe folder&gt;"</code></p>
+  <p>详见 / See <code>README.md</code>.</p>
+</div>
+<script src="js/gamedata.js?v=20261011f" onerror="void 0"></script>
+<script src="js/font.js?v=20261011f"></script>
+<script src="js/sim.js?v=20261011f"></script>
+<script src="js/render.js?v=20261011f"></script>
+<script src="tas/movie.js?v=20261011f" onerror="void 0"></script>
+<script src="tas/wr_times.js?v=20261011f" onerror="void 0"></script>
+<script src="js/app.js?v=20261011f"></script>
+<script>
+  const canvas = document.getElementById('c');
+  function fit() {
+    const s = Math.min(window.innerWidth / 640, window.innerHeight / 480);
+    canvas.style.width = Math.floor(640 * s) + 'px';
+    canvas.style.height = Math.floor(480 * s) + 'px';
+  }
+  window.addEventListener('resize', fit); fit();
+  if (window.GAMEDATA) window.app = new ZumaApp.App(canvas);
+  else { document.getElementById('wrap').style.display = 'none'; document.getElementById('noassets').style.display = 'block'; }
+</script>
+</body>
+</html>

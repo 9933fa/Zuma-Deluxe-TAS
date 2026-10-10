@@ -1,0 +1,571 @@
+# Claude TAS · Zuma Deluxe
+
+[中文](#中文) · [English](#english)
+
+<!-- generated from docs/tas_doc.html by tools/doc_to_md.py; edit the HTML and re-run -->
+
+---
+
+<a name="中文"></a>
+
+# 中文
+
+一个电脑“工具辅助速通”是怎样想出来、怎样打出来的
+
+| **9:38** | **11:22** | **−1:44** |
+|---|---|---|
+| Claude TAS 总用时（通关画面 TOTAL TIME） | 此前世界纪录 TAS（[QuocQuoc](https://www.youtube.com/@quocquoc444) & [DadoYep](https://www.youtube.com/@DadoYep)，[视频](#z10)） | 快了约 15% |
+
+[1 这是什么](#z1) · [2 规则](#z2) · [3 游戏机制](#z3) · [4 射击技巧](#z4) · [5 得分策略](#z5) · [6 路线规划](#z6) · [7 决策树与搜索](#z7) · [8 随机数与种子](#z8) · [9 版本迭代](#z9) · [10 与世界纪录对比](#z10) · [11 每关成绩](#z11) · [12 怎么观看](#z12) · [13 实现方式](#z13) · [14 致谢](#z14)
+
+<a name="z1"></a>
+
+## 1 这是什么
+
+这个项目把 PopCap 的 <b>Zuma Deluxe（祖玛豪华版）</b>按照公开的反编译源码一行一行地重写成了网页版，画面、声音、关卡、规则、甚至随机数都和原版一样。因为完全一样，同样的“开机随机数种子”加上同样的鼠标操作，就一定得到同样的结果——这就让电脑可以像人类 TAS 作者一样：先在脑子里（模拟器里）把一关试打成千上万次，挑出最快的打法，再把这一串操作录下来，在游戏里原样播放给你看。
+
+你在“MORE GAMES → Claude TAS 速通回放”里看到的，就是这样一份录像：从 1-1 一直打到 13-1 的完整冒险模式，每一发子弹、每一次换球都是事先算好的。
+
+<a name="z2"></a>
+
+## 2 规则：我给自己定的限制
+
+- <b>发球频率和原版完全一样。</b>青蛙吐出一颗球、再装好下一颗，大约要 0.21 秒；这段时间里不能再发射。关卡开始后大约 0.66 秒才能打第一发。
+- <b>不限转向速度，不限换球次数。</b>人类玩家要移动鼠标，TAS 可以每一帧把准星放到任何位置；右键换球是免费的。
+- <b>可以预知一切。</b>只要知道种子，就能推算出轨道上会来什么颜色的球、青蛙嘴里会装上什么颜色的球。
+- <b>可以无限次重来、回溯。</b>所以录像里没有任何失误，每一发都是“在当时那一刻，算得出来的最好选择之一”。
+- <b>目标只有一个：最快通关。</b>比较时用通关画面 WINNING TOTALS 里的 TOTAL TIME（每关关内用时之和），不算菜单、过场和加载。
+
+<a name="z3"></a>
+
+## 3 决定速度的游戏机制
+
+想打得快，先要知道“一关什么时候算结束”。原版的逻辑是：
+
+1. 分数达到本关目标后，进度条还要“涨满”——进度条每 0.01 秒最多涨 1/256。所以分数不能最后一下子全拿到，否则还得等进度条慢慢爬上去；比较理想的是在最后 2.5 秒里均匀地拿分。
+2. 进度条满了（达标）以后，入口不再出新球，已经在轨道上的球<b>必须全部消掉</b>，这一关才算结束。
+3. 连锁反应（COMBO）会把整条链往后撞：第 k 层连锁以每帧 1.5×k 像素后退 30 帧。达标以后被撞出入口的球会直接消失——这是清场的捷径。
+
+所以一关的时间 ≈ <b>“攒够分数”的时间 + “清掉剩下的球”的时间</b>。统计下来，达标那一刻轨道上每剩一颗球，大约要多花 0.15 秒去清理。Claude TAS 的整体思路，就是在尽早达标的同时，让达标那一刻留下的球尽量少、尽量好清。
+
+<a name="z4"></a>
+
+## 4 射击技巧
+
+### 精确瞄准：把所有可能的角度都试一遍
+
+屏幕边框上一共有 2240 个整数鼠标位置，每一个都是一个不同的发射角度。TAS 在每次发射前，先预演“如果不开火，接下来 1.6 秒每颗球会在哪里”，然后让子弹沿每个角度飞一遍，看它会撞上哪颗球、落在哪两颗球之间、路上会不会经过缝隙、会不会打中金币。相邻角度结果相同的归成一组，取组中间的那个角度——这样瞄准既精确又有容错。实际上先每隔 4 个点试一次，结果变化的地方再对半细分，直到逐点精确，所以一次扫描只需要试大约 600 个角度。
+
+这一步严格照搬原版的碰撞规则：子弹优先撞轨道和链表顺序里最靠前的球；如果撞到一颗球的前侧而它前面那颗也碰到了子弹，原版会把落点往回挪一格；隧道里的球打不到；正在消失的球会被子弹穿过。预测结果和真实模拟逐一对拍过。
+
+### 擦边缝隙奖励（GAP BONUS）
+
+原版判定“穿过缝隙”的方式很特别：子弹飞行中只要靠近轨道上某个采样点、而那里恰好在两颗球之间，就记一次“缝隙”，哪怕这两颗球是紧挨着的。落点所在的那个缝隙不算，别的都算。落下去之后只要能消掉一组，就加最高 500 分，多个缝隙还要乘以缝隙数。所以 TAS 会刻意找这样的角度：先从一颗球旁边擦过、再咬住它另一侧，凑成三连。上面的角度扫描会把这些“擦边角度”一个不漏地找出来。
+
+### 换球与颜色控制
+
+手上只有两颗球：当前这颗和下一颗，右键可以随时交换。新装的那颗球是什么颜色，由装弹那一刻的随机数决定；而随机数每一帧都在被消耗（道具、金币、爆炸粒子……）。所以<b>晚开火 1~6 帧，装上的颜色就会不同</b>。TAS 会对最有希望的几发子弹尝试不同的延迟，挑一个能让下一步正好有“对的颜色”的时机。这是这一版提速最大的一项。
+
+### 金币和弃球
+
+金币在后期关卡价值 800 分，相当于目标分的 16%，能顺路打到就打。手上两颗球都没用的时候，会把球打出屏幕（弃球），但这会中断连击奖励，所以只在不得已时使用。
+
+<a name="z5"></a>
+
+## 5 得分策略
+
+| 来源 | 分数 | TAS 怎么用 |
+|---|---|---|
+| 每消一颗球 | 10 | 基础分，不太重要 |
+| 连锁（第 k 层） | 100 × k | 同时还会把链往后撞，达标后能把球撞出入口 |
+| 连击 CHAIN（连续 n 发都消球，n ≥ 5） | 10n + 50 / 发 | 非常值钱：连续 20 发就是每发 250 分。所以尽量“发发都消”，少弃球 |
+| 缝隙奖励 | 最高 500 × 缝隙数 | 擦边角度，顺手就拿 |
+| 金币 | 目标分 ÷ 600 × 100（至少 500） | 路线允许时打 |
+
+分数只是手段。估值时并不奖励“多拿分”，而是估计“这样打，这一关预计在第几帧结束”。分数只在“还差多少分才能达标”这一项里起作用。
+
+<a name="z6"></a>
+
+## 6 路线规划：每一关怎么想
+
+TAS 不背固定套路，每一关、每一种出球都重新计算。它在每一个能开火的时刻问同一个问题：<b>“这一发打完以后，这一关最早能在什么时候结束？”</b>回答这个问题用到三样东西：
+
+1. <b>清场要几发：</b>把轨道上的球看成一串颜色段，比如“红2 蓝1 红1 绿2…”。用一种叫“区间动态规划”的方法，精确算出最少要再打几发才能把它们全部消掉——中间消掉后两边同色会合拢并连锁，这些都算进去（和暴力穷举对拍过，结果一致）。这正好避免了“把会自己合拢消掉的球又补一颗”这种浪费。
+2. <b>手上的颜色能不能用：</b>如果手里两颗球都不在“最少发数”的路线上，就要多花一发；这会被算作惩罚。
+3. <b>还差多少分、进度条还要涨多久、入口还会再进来多少球。</b>
+
+把这些换算成“预计结束帧”，越小越好。注意：这只是用来给候选动作排序的“估计”，每个候选最终都会用真实模拟去验证。
+
+<a name="z7"></a>
+
+## 7 决策树与搜索范围
+
+```
+每个节点 = 青蛙装好球、可以开火的那一刻（精确的游戏状态）
+│
+├─ 用当前球 / 换成下一颗球（2 种）
+│   └─ 落点：轨道上每个“能和同色球挨上”的位置（含擦边缝隙版本）
+│       → 先用估值粗排，取最好的 14 个
+├─ 打金币（如果有）
+├─ 弃球（打出屏幕）
+└─ 对前 3 名再试“晚 1~6 帧开火”（换随机数 → 换下一颗的颜色）
+    ↓
+每个分支都用真实模拟推进到下一次能开火，再让球自然滚 0.6 秒后估值
+    ↓
+集束搜索：每一层只保留估值最好的 64 个局面，继续往下展开，直到通关
+```
+
+- 一关大约 30 发、40~50 层；每层 64 个局面 × 每个约 20 个分支，一次搜索要真实模拟约 6 万个局面。
+- 每关同时跑 <b>22 套不同设置</b>（颜色惩罚强弱、延迟范围、观察时长、随机扰动），取所有结果里最好的几个。
+- 再对最好的 <b>4 个不同解</b>，各自往下一关快速试打，选“本关 + 下一关”加起来最快的那个（见下一节）。
+- 整个 76 关用 22 个 CPU 核心跑了大约 4 小时，总共模拟了上亿个局面。
+
+<a name="z8"></a>
+
+## 8 随机数与种子控制
+
+原版只有一条随机数流（Mersenne Twister），轨道上的新球、青蛙装的球、道具、金币、甚至爆炸的粒子特效都从这里取数：每爆一颗球就要消耗 240 个随机数。所以：
+
+- <b>种子</b>相当于开机时间。TAS 扫描了 100 个种子，选了 1-1 最快的 64 号。
+- <b>关内：</b>开火早一帧晚一帧、消球多一颗少一颗，后面所有颜色都会变。上面说的“晚 1~6 帧开火”就是主动利用这一点。
+- <b>跨关：</b>每一关开局时的随机数状态，取决于上一关是怎么打完的。于是“本关最快”的解不一定最好——它可能让下一关开局很差。TAS 会比较本关前 4 个解，各自往下一关试打，选两关合计最快的。这一招在 v3 时就比“逐关最快”快了 90 多秒。
+- 种子本身的影响反而是次要的：同一关换不同随机设置多跑几次，好坏能差 10% 左右，但“打法本身更聪明”带来的提升更大。
+
+<a name="z9"></a>
+
+## 9 版本迭代
+
+| 版本 | TOTAL TIME | 主要做法 | 学到了什么 |
+|---|---|---|---|
+| v1 | 14:00 | 回文连锁规划器 + 集束搜索，估值看“已得分 + 连锁潜力 − 清场发数”；每关 22 套设置取最快 | 能打通，但达标后清场太慢 |
+| v2 | — | 在 v1 基础上做“局部重算精修” | 慢 3 倍、没有提升，中途放弃 |
+| v3 | 12:27 | 加入跨关随机数操控（选让下一关更好打的解） | 跨关选择很值钱；但统计显示我们的缝隙分多、连锁少，打法本身有问题 |
+| <b>v4</b> | <b>9:38</b> | 全角度精确瞄准（含擦边缝隙）、区间 DP 清场代价、颜色可用性惩罚、延迟开火换颜色、估值改为“预计结束帧”、束宽 64 | 最大的两项提升：颜色控制和更宽的搜索 |
+
+### 试过但没用的想法
+
+- 专门规划长连锁并估计“撞出入口”的球：在测试集上没有稳定收益。
+- 给“正在进行的连锁要持续多久”加时间下限：明显变差（会让 TAS 躲开连锁）。
+- 用神经网络学习估值（用自己的录像训练）：和手写估值打平。
+- 允许主动“等一等不开火”、对所有候选都试延迟：都变差。
+
+### 一路上修掉的“理解错误”
+
+- 相距不到 40 像素的同色球曾被当成一组；实际上原版只把<b>真正贴在一起</b>的球算一组，被推着挤到一起的同色球不会自己消，还得再补一发。
+- 开火会生成一个新的球对象，导致之后入场的球编号整体 +1，比较预测和真实结果时要按位置而不是编号。
+
+<a name="z10"></a>
+
+## 10 与世界纪录对比
+
+> <b>世界纪录 TAS 作者：</b>QuocQuoc（[YouTube 频道](https://www.youtube.com/@quocquoc444)）与 DadoYep（[YouTube 频道](https://www.youtube.com/@DadoYep)）  
+>  <b>纪录视频：</b>[YouTube](https://www.youtube.com/watch?v=9vhNcWftR3Q) · [哔哩哔哩](https://www.bilibili.com/video/BV1qd6pYNECM)  
+>  本项目的每关对比时间都取自这份录像。我们从中学到了什么，见 [第 14 节 致谢](#z14)。
+
+|  | TOTAL TIME | COMBOS | COINS | GAPS | MAX CHAIN | MAX COMBO |
+|---|---|---|---|---|---|---|
+| 世界纪录 TAS | 11:22 | 685 | 52 | 61 | 25 | 10 |
+| Claude v3 | 12:27 | 459 | 25 | 478 | 21 | 5 |
+| <b>Claude v4</b> | <b>9:38</b> | 565 | 18 | 538 | 15 | 6 |
+
+两份 TAS 的风格完全不同。人类 TAS 擅长摆出 8~10 层的超长连锁，一次把整条链吃光；Claude TAS 的连锁最长只有 6 层、金币也拿得少，但它<b>平均 4.6 秒就达标</b>，然后用精确的颜色控制快速清场。全部 76 关逐关比较，Claude 更快 56 关、同一秒 14 关、更慢 6 关（3-1、8-7、9-3、10-5、11-1、12-3）。
+
+> 世界纪录的每关时间取自录像里每关结束后的统计画面，按原版规则显示为整秒（向下取整），数据在 `tas/wr_times.js`。比较时把 Claude 的用时也按同样规则取整。
+
+<a name="z11"></a>
+
+## 11 每关成绩
+
+| 关卡 | 地图 | Claude | 世界纪录 | 比较 |
+|---|---|---|---|---|
+| 1-1 | Spiral of Doom | 4.42 | 0:06 | 更快 |
+| 1-2 | Osprey Talon | 3.60 | 0:05 | 更快 |
+| 1-3 | Riverbed Mosaic | 4.99 | 0:05 | 更快 |
+| 1-4 | Breath of Ehecatl | 7.21 | 0:07 | 同一秒 |
+| 1-5 | Dark Vortex | 7.33 | 0:08 | 更快 |
+| 2-1 | When Spirals Attack | 6.80 | 0:08 | 更快 |
+| 2-2 | Mud Slide | 6.13 | 0:06 | 同一秒 |
+| 2-3 | Rorschach | 5.43 | 0:07 | 更快 |
+| 2-4 | Mouth of Centeotl | 6.44 | 0:07 | 更快 |
+| 2-5 | Snake Pit | 7.66 | 0:07 | 同一秒 |
+| 3-1 | Landing Pad | 8.24 | 0:07 | 更慢 |
+| 3-2 | Altar of Tlaloc | 6.75 | 0:10 | 更快 |
+| 3-3 | Codex of Mixtec | 6.94 | 0:08 | 更快 |
+| 3-4 | Shrine of Quetzalcoatl | 7.60 | 0:08 | 更快 |
+| 3-5 | Mirror Serpent | 8.85 | 0:09 | 更快 |
+| 4-1 | Spiral of Doom | 6.83 | 0:07 | 更快 |
+| 4-2 | Osprey Talon | 5.11 | 0:07 | 更快 |
+| 4-3 | Riverbed Mosaic | 6.81 | 0:08 | 更快 |
+| 4-4 | Breath of Ehecatl | 7.14 | 0:07 | 同一秒 |
+| 4-5 | Dark Vortex | 6.52 | 0:09 | 更快 |
+| 4-6 | Switchback | 6.11 | 0:09 | 更快 |
+| 5-1 | When Spirals Attack | 7.59 | 0:09 | 更快 |
+| 5-2 | Mud Slide | 5.74 | 0:09 | 更快 |
+| 5-3 | Rorschach | 6.43 | 0:09 | 更快 |
+| 5-4 | Mouth of Centeotl | 7.52 | 0:08 | 更快 |
+| 5-5 | Snake Pit | 6.40 | 0:10 | 更快 |
+| 5-6 | Sand Garden | 7.57 | 0:10 | 更快 |
+| 6-1 | Landing Pad | 8.75 | 0:08 | 同一秒 |
+| 6-2 | Altar of Tlaloc | 8.22 | 0:09 | 更快 |
+| 6-3 | Codex of Mixtec | 9.49 | 0:10 | 更快 |
+| 6-4 | Shrine of Quetzalcoatl | 6.09 | 0:09 | 更快 |
+| 6-5 | Mirror Serpent | 9.13 | 0:10 | 更快 |
+| 6-6 | Sun Stone | 7.08 | 0:09 | 更快 |
+| 7-1 | Spiral of Doom | 5.61 | 0:07 | 更快 |
+| 7-2 | Osprey Talon | 6.08 | 0:08 | 更快 |
+| 7-3 | Riverbed Mosaic | 5.77 | 0:07 | 更快 |
+| 7-4 | Breath of Ehecatl | 6.74 | 0:08 | 更快 |
+| 7-5 | Dark Vortex | 9.06 | 0:09 | 同一秒 |
+| 7-6 | Switchback | 7.60 | 0:07 | 同一秒 |
+| 7-7 | Long Range | 7.18 | 0:09 | 更快 |
+| 8-1 | When Spirals Attack | 6.99 | 0:07 | 更快 |
+| 8-2 | Mud Slide | 7.08 | 0:08 | 更快 |
+| 8-3 | Rorschach | 6.99 | 0:08 | 更快 |
+| 8-4 | Mouth of Centeotl | 9.16 | 0:09 | 同一秒 |
+| 8-5 | Snake Pit | 6.02 | 0:10 | 更快 |
+| 8-6 | Sand Garden | 8.65 | 0:09 | 更快 |
+| 8-7 | Lair of the Mud Snake | 10.12 | 0:07 | 更慢 |
+| 9-1 | Landing Pad | 7.02 | 0:09 | 更快 |
+| 9-2 | Altar of Tlaloc | 8.89 | 0:08 | 同一秒 |
+| 9-3 | Codex of Mixtec | 10.51 | 0:08 | 更慢 |
+| 9-4 | Shrine of Quetzalcoatl | 7.01 | 0:10 | 更快 |
+| 9-5 | Mirror Serpent | 10.63 | 0:10 | 同一秒 |
+| 9-6 | Sun Stone | 8.37 | 0:08 | 同一秒 |
+| 9-7 | Zumaic Exodus | 7.54 | 0:09 | 更快 |
+| 10-1 | Spiral of Doom | 8.73 | 0:09 | 更快 |
+| 10-2 | Osprey Talon | 6.34 | 0:08 | 更快 |
+| 10-3 | Riverbed Mosaic | 7.33 | 0:09 | 更快 |
+| 10-4 | Breath of Ehecatl | 6.66 | 0:09 | 更快 |
+| 10-5 | Dark Vortex | 12.28 | 0:10 | 更慢 |
+| 10-6 | Switchback | 6.94 | 0:09 | 更快 |
+| 10-7 | Long Range | 8.19 | 0:09 | 更快 |
+| 11-1 | When Spirals Attack | 10.47 | 0:09 | 更慢 |
+| 11-2 | Mud Slide | 9.06 | 0:10 | 更快 |
+| 11-3 | Rorschach | 6.93 | 0:09 | 更快 |
+| 11-4 | Mouth of Centeotl | 7.79 | 0:08 | 更快 |
+| 11-5 | Snake Pit | 8.45 | 0:11 | 更快 |
+| 11-6 | Sand Garden | 8.34 | 0:10 | 更快 |
+| 11-7 | Lair of the Mud Snake | 8.41 | 0:09 | 更快 |
+| 12-1 | Landing Pad | 9.88 | 0:09 | 同一秒 |
+| 12-2 | Altar of Tlaloc | 9.89 | 0:09 | 同一秒 |
+| 12-3 | Codex of Mixtec | 9.33 | 0:08 | 更慢 |
+| 12-4 | Shrine of Quetzalcoatl | 8.87 | 0:10 | 更快 |
+| 12-5 | Mirror Serpent | 9.41 | 0:10 | 更快 |
+| 12-6 | Sun Stone | 8.35 | 0:08 | 同一秒 |
+| 12-7 | Zumaic Exodus | 5.80 | 0:10 | 更快 |
+| 13-1 | space | 10.87 | 0:15 | 更快 |
+| **合计** | | **9:38.26** | **11:22** | |
+
+<a name="z12"></a>
+
+## 12 怎么观看
+
+- 主菜单点 <b>MORE GAMES</b> → “Claude TAS 速通回放”，可以从头看，也可以从任意大关开始。
+- 左上角：本关用时、对应关的世界纪录、总时间。十字是 TAS 的鼠标，黄圈是左键发射，蓝圈是右键换球。
+- 底部按钮：暂停/继续、单帧、减速、加速、<b>本关重开</b>（快捷键 R）、退出。键盘：空格暂停，→ 单帧，+/- 变速，Esc 退出。
+
+<a name="z13"></a>
+
+## 13 实现方式（给好奇的人）
+
+- <b>复刻：</b>依据 CircleShootApp 反编译源码，把 Board、CurveMgr、Ball、Bullet、Gun、关卡解析、过场管理、粒子、音效逐一移植成 JavaScript；单精度浮点、随机数消耗顺序都和原版一致。同一份录像在 Node.js 和浏览器里重放，76 关每一帧都完全相同。
+- <b>搜索：</b>纯 JavaScript，复制一份完整游戏状态约 0.15 毫秒，模拟一帧约 0.02 毫秒。每个工作进程独立重放录像到关卡开头再搜索。
+- <b>代码位置：</b>`js/sim.js`（游戏逻辑）、`tools/tas/v4.js`（瞄准扫描、清场 DP、估值、集束搜索）、`tools/tas/run_v4.js`（整局驱动与跨关选择）、`tas/movie.js`（录像）。
+
+<a name="z14"></a>
+
+## 14 致谢：从世界纪录 TAS 学到的东西
+
+特别感谢 <b>QuocQuoc</b>（[YouTube](https://www.youtube.com/@quocquoc444)）和 <b>DadoYep</b>（[YouTube](https://www.youtube.com/@DadoYep)）制作并公开了 Zuma Deluxe 的世界纪录 TAS（[YouTube](https://www.youtube.com/watch?v=9vhNcWftR3Q) / [哔哩哔哩](https://www.bilibili.com/video/BV1qd6pYNECM)）。没有这份录像，Claude TAS 既没有可以追赶的目标，也不会知道自己错在哪里。具体来说，我们从他们的作品里学到了：
+
+1. <b>一关真正的终点是“清场”，不是“达标”。</b>看他们的录像会发现，进度条一满，剩下的球很快就没了——长连锁把整条链往后撞出入口。对照之下，我们 v3 达标后还要花 3~8 秒一颗颗清球。这让我们把估值从“拿了多少分”改成了“预计第几帧结束”，并专门研究达标那一刻轨道上剩下多少球。
+2. <b>统计画面会说话。</b>他们的通关统计是连锁 685、缝隙 61；我们 v3 是连锁 459、缝隙 478。这说明我们在追逐缝隙奖励的分数，而不是在高效地消球。这个对比直接推动了 v4 的重写。
+3. <b>CHAIN 连击奖励值得经营。</b>他们打出过连续 25 发都消球的连击。连击奖励每发 10n+50 分，越往后越值钱，所以 TAS 尽量做到“发发有效”，非必要不弃球。
+4. <b>金币不是装饰。</b>他们吃了 52 枚金币。后期一枚金币相当于目标分的 16%，这让我们把“打金币”放进了每一步的候选动作。
+5. <b>超长连锁是可以设计出来的。</b>他们能把链摆成 8~10 层连锁，一次吃光整条链，说明“边连锁边补色”在原版的发射频率下是做得到的。我们的最长连锁目前只有 6 层，这是 Claude TAS 还落后于人类 TAS 的地方，也是下一步最值得学习的方向。
+6. <b>一把可靠的尺子。</b>他们每关结束后的统计画面给出了每一关的用时，让我们能逐关比较、找出最慢的关卡重点改进。我们甚至从录像里学会了判断一关的开始和结束：进度条由绿变黄就是开局，结束奖励的爆炸出现前 0.2 秒就是终点。
+
+Claude TAS 最后用了一种和他们很不一样的打法（尽早达标 + 精确的颜色控制）超过了这个纪录，但这条路是沿着他们留下的路标找到的。再次感谢两位作者。
+
+---
+
+<a name="english"></a>
+
+# English
+
+How a computer-made tool-assisted speedrun of Zuma Deluxe was planned and played
+
+| **9:38** | **11:22** | **−1:44** |
+|---|---|---|
+| Claude TAS total (TOTAL TIME on the final screen) | Previous world-record TAS ([QuocQuoc](https://www.youtube.com/@quocquoc444) & [DadoYep](https://www.youtube.com/@DadoYep), [video](#e10)) | about 15% faster |
+
+[1 What is this](#e1) · [2 Rules](#e2) · [3 Mechanics](#e3) · [4 Shooting](#e4) · [5 Scoring](#e5) · [6 Route planning](#e6) · [7 Decision tree & search](#e7) · [8 RNG & seed](#e8) · [9 Versions](#e9) · [10 vs the WR](#e10) · [11 Per-level times](#e11) · [12 How to watch](#e12) · [13 Implementation](#e13) · [14 Acknowledgements](#e14)
+
+<a name="e1"></a>
+
+## 1 What is this
+
+This project rebuilds PopCap's <b>Zuma Deluxe</b> as a web page, line by line from the public decompiled source code. Graphics, sound, levels, rules and even the random number generator behave exactly like the original. Because of that, the same start-up seed plus the same mouse inputs always give exactly the same game. That lets the computer work like a human TAS author: try each level thousands of times in simulation, keep the fastest way to play it, record the inputs, and replay them inside the game for you to watch.
+
+The replay under “MORE GAMES → Claude TAS” is such a recording: the complete Adventure mode from 1-1 to 13-1, with every shot and every ball swap computed in advance.
+
+<a name="e2"></a>
+
+## 2 Rules I set for myself
+
+- <b>Same firing rate as the original.</b> Spitting a ball and loading the next one takes about 0.21 s, and the first shot of a level is possible about 0.66 s after it starts.
+- <b>No limit on turning speed or swaps.</b> A human has to move the mouse; the TAS can put the cursor anywhere on any frame, and right-click swaps are free.
+- <b>Perfect foresight.</b> Knowing the seed means knowing which colours will roll onto the track and which colours the frog will load.
+- <b>Unlimited retries.</b> So there are no mistakes in the run: every shot is one of the best choices that could be found at that moment.
+- <b>One goal: finish as fast as possible.</b> Runs are compared by TOTAL TIME on the WINNING TOTALS screen, which is the sum of in-level times. Menus, transitions and loading don't count.
+
+<a name="e3"></a>
+
+## 3 The mechanics that decide speed
+
+To be fast you first need to know when a level actually ends. In the original:
+
+1. Reaching the target score is not enough: the progress bar must also fill up. It grows by at most 1/256 every 0.01 s, so scoring everything at the last moment means waiting for the bar to catch up. Ideally the score arrives evenly over the last 2.5 seconds.
+2. Once the bar is full, no new balls enter, but <b>every ball still on the track must be destroyed</b> before the level is over.
+3. Chain reactions (COMBOs) knock the whole chain backwards: layer k pushes it back by 1.5×k pixels per frame for 30 frames. After the target is reached, balls pushed out of the entrance simply disappear, which is a shortcut for cleaning up.
+
+So a level takes roughly <b>“time to score enough” + “time to clear what is left”</b>. Measured over our runs, every ball still on the track at the moment of the target costs about 0.15 s of clean-up. The whole idea of Claude TAS is to reach the target early while leaving as few, and as easy, balls as possible.
+
+<a name="e4"></a>
+
+## 4 Shooting techniques
+
+### Exact aiming: try every angle
+
+The screen border has 2240 integer mouse positions, and each one is a different firing angle. Before each shot the TAS first predicts where every ball will be over the next 1.6 seconds if it doesn't fire. Then it flies the ball along each angle and checks which ball it hits, which two balls it lands between, whether it passes a gap on the way, and whether it hits a coin. Neighbouring angles with the same result are grouped, and the middle of the group is used, so aiming is exact and has some tolerance. In practice it samples every 4th point and bisects wherever the result changes, down to single points, so one sweep needs only about 600 traces.
+
+The collision rules are copied exactly from the original: the bullet takes the first touchable ball in track and chain order; if it hits the front of a ball whose neighbour also touches it, the original moves the landing slot back by one; balls inside tunnels can't be hit; balls that are already vanishing let bullets fly through. Predictions were checked one by one against the real simulation.
+
+### Grazing gap bonus
+
+The original's “shot through a gap” test is unusual. While flying, the bullet only has to come close to a track sample point that lies between two balls, even two balls that touch each other. The gap the bullet lands in doesn't count; any other gap does. If the landing ball then completes a set, the shot earns up to 500 points, multiplied by the number of gaps. So the TAS looks for angles that graze past one side of a ball and then catch its far side to make three in a row. The angle sweep above finds all of these grazing angles.
+
+### Swapping and colour control
+
+You only ever hold two balls, the current one and the next one, and you can swap them at any time. The colour of each newly loaded ball comes from the random numbers at the moment of reloading. Random numbers are used up every frame (power-ups, coins, explosion particles…), so <b>firing 1–6 frames later loads a different colour</b>. For its most promising shots the TAS tries different delays and picks the timing that gives it the right colour for the next step. This was the single biggest improvement in this version.
+
+### Coins and throwaways
+
+In late levels a coin is worth 800 points, 16% of the target, so the TAS takes it when the route allows. When neither ball in hand is useful, it fires one off-screen, but that breaks the CHAIN bonus, so it is a last resort.
+
+<a name="e5"></a>
+
+## 5 Scoring strategy
+
+| Source | Points | How the TAS uses it |
+|---|---|---|
+| Each ball destroyed | 10 | Base points, not important |
+| Chain reaction, layer k | 100 × k | Also knocks the chain back; after the target it can push balls out of the entrance |
+| CHAIN bonus (n shots in a row that all destroy balls, n ≥ 5) | 10n + 50 per shot | Very valuable: 20 in a row is 250 per shot, so the TAS tries to make every shot count and avoids throwaways |
+| Gap bonus | up to 500 × gaps | Grazing angles, taken whenever convenient |
+| Coin | target ÷ 600 × 100 (at least 500) | Taken when the route allows |
+
+Points are only a means to an end. The value function does not reward points as such; it estimates on which frame the level will end, and points only enter through “how much is still missing to reach the target”.
+
+<a name="e6"></a>
+
+## 6 Route planning: how each level is approached
+
+There is no memorised strategy; every level and every ball sequence is computed fresh. At every moment it can fire, the TAS asks one question: <b>“after this shot, what is the earliest this level can end?”</b> The answer uses three things:
+
+1. <b>How many shots the clean-up needs.</b> The chain is a list of colour runs such as “red 2, blue 1, red 1, green 2…”. A method called interval dynamic programming computes exactly how many more shots are needed to clear all of it, including runs that close up and chain-react when the run between them disappears. It was checked against brute-force search. This stops the old mistake of adding a ball to a run that was going to disappear by itself anyway.
+2. <b>Whether the colours in hand fit.</b> If neither ball in hand is on a shortest route, one extra shot is charged as a penalty.
+3. <b>How many points are still missing, how long the bar still needs, and how many more balls will roll in.</b>
+
+All of this is turned into an “estimated finishing frame”, and lower is better. It is only used to rank candidate moves; every candidate is then checked with the real simulation.
+
+<a name="e7"></a>
+
+## 7 Decision tree and search size
+
+```
+Node = the moment the frog has a ball loaded and may fire (an exact game state)
+│
+├─ fire the current ball / swap to the next ball (2)
+│   └─ landing spot: every place next to a same-coloured run (with grazing-gap variants)
+│       → pre-ranked by the estimate, best 14 kept
+├─ hit the coin (if there is one)
+├─ throw away (fire off-screen)
+└─ for the top 3: also try firing 1–6 frames later (new random numbers → new next colour)
+    ↓
+each branch is simulated exactly up to the next moment the frog can fire; the balls then roll on for 0.6 s and the state is scored
+    ↓
+beam search: keep the 64 best states at each depth and expand them again, until the level is won
+```
+
+- A level takes about 30 shots and 40–50 search depths; 64 states × about 20 branches each means roughly 60,000 exactly simulated positions per search.
+- Each level runs <b>22 different settings</b> in parallel (strength of the colour penalty, delay range, settling time, random tie-breaking), and the best results are kept.
+- The best <b>4 distinct solutions</b> each get a quick trial run of the next level, and the TAS keeps the one where this level plus the next is fastest (see the next section).
+- All 76 levels took about 4 hours on 22 CPU cores, simulating well over a hundred million positions.
+
+<a name="e8"></a>
+
+## 8 Random numbers and seed control
+
+The original has a single stream of random numbers (a Mersenne Twister). New track balls, loaded frog balls, power-ups, coins and even explosion particles all draw from it; every ball that pops uses up 240 random numbers. So:
+
+- <b>The seed</b> is like the time the game was started. The TAS scanned 100 seeds and picked number 64, which gave the fastest 1-1.
+- <b>Within a level:</b> firing one frame earlier or later, or popping one ball more or less, changes every colour that follows. The “fire 1–6 frames later” trick above uses this deliberately.
+- <b>Across levels:</b> the random state at the start of a level depends on exactly how the previous level ended. The fastest solution for this level can leave the next level with a bad start. So the TAS compares its top 4 solutions by trying the next level from each one, and keeps the best two-level total. In v3 this alone was worth over 90 seconds compared with simply taking the fastest solution for each level.
+- The seed itself matters less than you might think. Re-running a level with different random settings varies the result by about 10%, but smarter play gained much more.
+
+<a name="e9"></a>
+
+## 9 Versions
+
+| Version | TOTAL TIME | Main idea | Lesson |
+|---|---|---|---|
+| v1 | 14:00 | Palindrome cascade planner + beam search, valued by “score so far + cascade potential − shots to clear”; best of 22 settings per level | Finishes the game, but the clean-up after the target is too slow |
+| v2 | — | v1 plus local re-optimisation | 3× slower and no better; abandoned |
+| v3 | 12:27 | Cross-level RNG manipulation (pick the solution that makes the next level easier) | Cross-level choice is valuable, but the stats (many gap bonuses, few combos) showed the play style itself was wrong |
+| <b>v4</b> | <b>9:38</b> | Exact all-angle aiming (with grazing gaps), interval-DP clean-up cost, colour-availability penalty, delayed firing to re-roll colours, value = estimated finishing frame, beam width 64 | The two biggest gains: colour control and a wider search |
+
+### Ideas that did not help
+
+- Planning long cascades explicitly and estimating which balls get pushed out of the entrance: no consistent gain on the test levels.
+- Adding a lower bound for how long a running cascade will take: clearly worse (the TAS started avoiding cascades).
+- Learning the value function with a neural network trained on its own replays: a tie with the hand-written estimate.
+- Allowing a deliberate “wait, don't fire” option, or trying delays for every candidate: both worse.
+
+### Misunderstandings fixed along the way
+
+- Same-coloured balls less than 40 pixels apart used to be treated as one group. The original only groups balls that <b>actually touch</b>; balls pushed together this way do not pop by themselves and need one more shot.
+- Firing creates a new ball object, so every ball that enters afterwards gets an id one higher. Predictions and real results must therefore be compared by position, not by id.
+
+<a name="e10"></a>
+
+## 10 Compared with the world record
+
+> <b>World-record TAS by:</b> QuocQuoc ([YouTube channel](https://www.youtube.com/@quocquoc444)) and DadoYep ([YouTube channel](https://www.youtube.com/@DadoYep))  
+>  <b>Record video:</b> [YouTube](https://www.youtube.com/watch?v=9vhNcWftR3Q) · [Bilibili](https://www.bilibili.com/video/BV1qd6pYNECM)  
+>  All per-level comparison times in this project come from that video. What we learnt from it is in [section 14, Acknowledgements](#e14).
+
+|  | TOTAL TIME | COMBOS | COINS | GAPS | MAX CHAIN | MAX COMBO |
+|---|---|---|---|---|---|---|
+| World-record TAS | 11:22 | 685 | 52 | 61 | 25 | 10 |
+| Claude v3 | 12:27 | 459 | 25 | 478 | 21 | 5 |
+| <b>Claude v4</b> | <b>9:38</b> | 565 | 18 | 538 | 15 | 6 |
+
+The two TAS runs play very differently. The human TAS builds huge 8–10 layer cascades that eat a whole chain at once. Claude's longest cascade is only 6 layers and it collects fewer coins, but it <b>reaches the target after 4.6 s on average</b> and then clears the rest quickly with precise colour control. Comparing all 76 levels one by one, Claude is faster on 56, within the same second on 14, and slower on 6 (3-1, 8-7, 9-3, 10-5, 11-1, 12-3).
+
+> The WR's per-level times come from the stats screen shown after each level in its video. Like the original game, it shows whole seconds (rounded down). The data is in `tas/wr_times.js`, and Claude's times are rounded the same way when comparing.
+
+<a name="e11"></a>
+
+## 11 Per-level times
+
+| Level | Map | Claude | World record | Result |
+|---|---|---|---|---|
+| 1-1 | Spiral of Doom | 4.42 | 0:06 | faster |
+| 1-2 | Osprey Talon | 3.60 | 0:05 | faster |
+| 1-3 | Riverbed Mosaic | 4.99 | 0:05 | faster |
+| 1-4 | Breath of Ehecatl | 7.21 | 0:07 | same second |
+| 1-5 | Dark Vortex | 7.33 | 0:08 | faster |
+| 2-1 | When Spirals Attack | 6.80 | 0:08 | faster |
+| 2-2 | Mud Slide | 6.13 | 0:06 | same second |
+| 2-3 | Rorschach | 5.43 | 0:07 | faster |
+| 2-4 | Mouth of Centeotl | 6.44 | 0:07 | faster |
+| 2-5 | Snake Pit | 7.66 | 0:07 | same second |
+| 3-1 | Landing Pad | 8.24 | 0:07 | slower |
+| 3-2 | Altar of Tlaloc | 6.75 | 0:10 | faster |
+| 3-3 | Codex of Mixtec | 6.94 | 0:08 | faster |
+| 3-4 | Shrine of Quetzalcoatl | 7.60 | 0:08 | faster |
+| 3-5 | Mirror Serpent | 8.85 | 0:09 | faster |
+| 4-1 | Spiral of Doom | 6.83 | 0:07 | faster |
+| 4-2 | Osprey Talon | 5.11 | 0:07 | faster |
+| 4-3 | Riverbed Mosaic | 6.81 | 0:08 | faster |
+| 4-4 | Breath of Ehecatl | 7.14 | 0:07 | same second |
+| 4-5 | Dark Vortex | 6.52 | 0:09 | faster |
+| 4-6 | Switchback | 6.11 | 0:09 | faster |
+| 5-1 | When Spirals Attack | 7.59 | 0:09 | faster |
+| 5-2 | Mud Slide | 5.74 | 0:09 | faster |
+| 5-3 | Rorschach | 6.43 | 0:09 | faster |
+| 5-4 | Mouth of Centeotl | 7.52 | 0:08 | faster |
+| 5-5 | Snake Pit | 6.40 | 0:10 | faster |
+| 5-6 | Sand Garden | 7.57 | 0:10 | faster |
+| 6-1 | Landing Pad | 8.75 | 0:08 | same second |
+| 6-2 | Altar of Tlaloc | 8.22 | 0:09 | faster |
+| 6-3 | Codex of Mixtec | 9.49 | 0:10 | faster |
+| 6-4 | Shrine of Quetzalcoatl | 6.09 | 0:09 | faster |
+| 6-5 | Mirror Serpent | 9.13 | 0:10 | faster |
+| 6-6 | Sun Stone | 7.08 | 0:09 | faster |
+| 7-1 | Spiral of Doom | 5.61 | 0:07 | faster |
+| 7-2 | Osprey Talon | 6.08 | 0:08 | faster |
+| 7-3 | Riverbed Mosaic | 5.77 | 0:07 | faster |
+| 7-4 | Breath of Ehecatl | 6.74 | 0:08 | faster |
+| 7-5 | Dark Vortex | 9.06 | 0:09 | same second |
+| 7-6 | Switchback | 7.60 | 0:07 | same second |
+| 7-7 | Long Range | 7.18 | 0:09 | faster |
+| 8-1 | When Spirals Attack | 6.99 | 0:07 | faster |
+| 8-2 | Mud Slide | 7.08 | 0:08 | faster |
+| 8-3 | Rorschach | 6.99 | 0:08 | faster |
+| 8-4 | Mouth of Centeotl | 9.16 | 0:09 | same second |
+| 8-5 | Snake Pit | 6.02 | 0:10 | faster |
+| 8-6 | Sand Garden | 8.65 | 0:09 | faster |
+| 8-7 | Lair of the Mud Snake | 10.12 | 0:07 | slower |
+| 9-1 | Landing Pad | 7.02 | 0:09 | faster |
+| 9-2 | Altar of Tlaloc | 8.89 | 0:08 | same second |
+| 9-3 | Codex of Mixtec | 10.51 | 0:08 | slower |
+| 9-4 | Shrine of Quetzalcoatl | 7.01 | 0:10 | faster |
+| 9-5 | Mirror Serpent | 10.63 | 0:10 | same second |
+| 9-6 | Sun Stone | 8.37 | 0:08 | same second |
+| 9-7 | Zumaic Exodus | 7.54 | 0:09 | faster |
+| 10-1 | Spiral of Doom | 8.73 | 0:09 | faster |
+| 10-2 | Osprey Talon | 6.34 | 0:08 | faster |
+| 10-3 | Riverbed Mosaic | 7.33 | 0:09 | faster |
+| 10-4 | Breath of Ehecatl | 6.66 | 0:09 | faster |
+| 10-5 | Dark Vortex | 12.28 | 0:10 | slower |
+| 10-6 | Switchback | 6.94 | 0:09 | faster |
+| 10-7 | Long Range | 8.19 | 0:09 | faster |
+| 11-1 | When Spirals Attack | 10.47 | 0:09 | slower |
+| 11-2 | Mud Slide | 9.06 | 0:10 | faster |
+| 11-3 | Rorschach | 6.93 | 0:09 | faster |
+| 11-4 | Mouth of Centeotl | 7.79 | 0:08 | faster |
+| 11-5 | Snake Pit | 8.45 | 0:11 | faster |
+| 11-6 | Sand Garden | 8.34 | 0:10 | faster |
+| 11-7 | Lair of the Mud Snake | 8.41 | 0:09 | faster |
+| 12-1 | Landing Pad | 9.88 | 0:09 | same second |
+| 12-2 | Altar of Tlaloc | 9.89 | 0:09 | same second |
+| 12-3 | Codex of Mixtec | 9.33 | 0:08 | slower |
+| 12-4 | Shrine of Quetzalcoatl | 8.87 | 0:10 | faster |
+| 12-5 | Mirror Serpent | 9.41 | 0:10 | faster |
+| 12-6 | Sun Stone | 8.35 | 0:08 | same second |
+| 12-7 | Zumaic Exodus | 5.80 | 0:10 | faster |
+| 13-1 | space | 10.87 | 0:15 | faster |
+| **Total** | | **9:38.26** | **11:22** | |
+
+<a name="e12"></a>
+
+## 12 How to watch
+
+- Main menu → <b>MORE GAMES</b> → “Claude TAS”. Watch from the start or from any stage.
+- Top left: time in this level, the WR time for this level, total time. The cross is the TAS's mouse, a yellow ring is a left-click shot, a blue ring is a right-click swap.
+- Bottom buttons: pause/continue, single frame, slower, faster, <b>restart this level</b> (key R), exit. Keys: space pauses, → steps one frame, +/- change speed, Esc exits.
+
+<a name="e13"></a>
+
+## 13 Implementation (for the curious)
+
+- <b>Replica:</b> following the CircleShootApp decompilation, Board, CurveMgr, Ball, Bullet, Gun, the level parser, the transition manager, particles and sounds were ported one by one to JavaScript, with single-precision floats and the same order of random-number use. The same replay gives identical frames for all 76 levels in Node.js and in the browser.
+- <b>Search:</b> plain JavaScript; copying the full game state takes about 0.15 ms and simulating one frame about 0.02 ms. Each worker process replays the recording up to the start of the level and then searches.
+- <b>Where the code is:</b> `js/sim.js` (game logic), `tools/tas/v4.js` (aim sweep, clean-up DP, value, beam search), `tools/tas/run_v4.js` (full-run driver and cross-level choice), `tas/movie.js` (the recording).
+
+<a name="e14"></a>
+
+## 14 Acknowledgements: what we learnt from the world-record TAS
+
+Special thanks to <b>QuocQuoc</b> ([YouTube](https://www.youtube.com/@quocquoc444)) and <b>DadoYep</b> ([YouTube](https://www.youtube.com/@DadoYep)) for making and publishing the Zuma Deluxe world-record TAS ([YouTube](https://www.youtube.com/watch?v=9vhNcWftR3Q) / [Bilibili](https://www.bilibili.com/video/BV1qd6pYNECM)). Without their run, Claude TAS would have had no target to chase and no way of telling what it was doing wrong. In particular, their work taught us:
+
+1. <b>A level really ends when the track is clear, not when the bar is full.</b> In their video, the remaining balls vanish soon after the bar fills, because long cascades knock the whole chain back out of the entrance. Our v3, by comparison, spent 3–8 seconds picking off balls one by one after reaching the target. This is why we changed the value function from “points scored” to “estimated finishing frame”, and started looking closely at how many balls are left at the moment of the target.
+2. <b>The stats screen tells a story.</b> Their final stats were 685 combos and 61 gaps; our v3 had 459 combos and 478 gaps. We were chasing gap-bonus points instead of clearing balls efficiently. That comparison is what triggered the v4 rewrite.
+3. <b>The CHAIN bonus is worth nursing.</b> They reached a chain of 25 shots in a row that all cleared balls. The bonus is 10n+50 points per shot and keeps growing, so the TAS tries to make every shot count and only throws a ball away when it has to.
+4. <b>Coins are not decoration.</b> They collected 52 coins. In late levels one coin is 16% of the target score, so hitting the coin became one of the candidate moves at every step.
+5. <b>Huge cascades can be built on purpose.</b> They arrange the chain into 8–10 layer cascades that eat an entire chain at once, which proves that fixing colours while a cascade is running is possible at the original firing rate. Our longest cascade is still only 6 layers. This is where Claude TAS still trails the human TAS, and the most promising thing left to learn from them.
+6. <b>A reliable ruler.</b> The stats screen after each of their levels gave us a per-level time to compare against, so we could find our slowest levels and work on those first. We even learnt from their video how to read a level's start and end: the progress bar turning from green to yellow marks the start, and the level ends 0.2 s before the bonus explosions appear.
+
+Claude TAS ended up beating the record with a very different style (reach the target early, then precise colour control), but it found that path by following the signposts they left. Thanks again to both of them.
