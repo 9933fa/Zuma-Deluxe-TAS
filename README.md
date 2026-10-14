@@ -1,4 +1,4 @@
-# ZumaTAS: a faithful Zuma Deluxe replica + Claude TAS (9:38)
+# ZumaTAS: a faithful Zuma Deluxe replica + Claude TAS (9:11)
 
 [English](#english) · [中文](#中文) · Full write-up: [docs/TAS.md](docs/TAS.md) (also in-game as `docs/tas_doc.html`)
 
@@ -6,9 +6,10 @@
 |---|---|---|---|---|---|---|
 | World-record TAS by [QuocQuoc](https://www.youtube.com/@quocquoc444) & [DadoYep](https://www.youtube.com/@DadoYep) ([YouTube](https://www.youtube.com/watch?v=9vhNcWftR3Q) / [Bilibili](https://www.bilibili.com/video/BV1qd6pYNECM)) | 11:22 | 685 | 52 | 61 | 25 | 10 |
 | Claude TAS v3 (`tas/movie_v3.js`) | 12:27 | 459 | 25 | 478 | 21 | 5 |
-| **Claude TAS v4** (`tas/movie.js`) | **9:38** (578.26 s) | 565 | 18 | 538 | 15 | 6 |
+| Claude TAS v4 (`tas/movie_v4.js`) | 9:38 (578.26 s) | 565 | 18 | 538 | 15 | 6 |
+| **Claude TAS v4 + wide parallel search** (`tas/movie.js`) | **9:11** (551.00 s) | 517 | 11 | 520 | 14 | 7 |
 
-TOTAL TIME is the sum of in-level times shown on the game's WINNING TOTALS screen. Level by level, v4 is faster than the world record on 56 of 76 levels, in the same second on 14 and slower on 6.
+TOTAL TIME is the sum of in-level times shown on the game's WINNING TOTALS screen. The current movie was produced by re-running the unmodified v4 searcher as four independent full 76-level runs in parallel (beam widths 32/48/64/96, cross-level candidates up to 16; 112 workers on 128 cores) and keeping the best — the four paths landed within 551.0–553.0 s, so that is roughly what this search converges to at this compute budget. Level by level it is faster than the world record on 64 of 76 levels, in the same second on 11 and slower on 1 (3-3).
 
 ---
 
@@ -32,7 +33,7 @@ TOTAL TIME is the sum of in-level times shown on the game's WINNING TOTALS scree
 # 1. build the assets from your installation (writes assets/ and js/gamedata.js)
 python tools/build_assets.py --game "C:/Program Files (x86)/Steam/steamapps/common/Zuma Deluxe" --openmpt path/to/openmpt123 --ffmpeg path/to/ffmpeg
 
-# 2. check that your game data matches the recording (should print TOTAL TIME 9:38)
+# 2. check that your game data matches the recording (should print TOTAL TIME 9:11)
 node tools/tas/final_stats.js tas/movie.js
 
 # 3. serve the folder and open http://localhost:8767
@@ -53,7 +54,18 @@ The build script prints SHA-256 checksums of `levels/levels.xml` and `properties
 node tools/tas/run_v4.js 64 22 4 _v4 64 8   # seed 64, 22 worker processes, compare 4 solutions, beam width 64, lookahead width 8
 ```
 
-This writes `tas/progress_64_v4.json` (resumable) and `tas/movie_v4.js`; copy it to `tas/movie.js` to watch it. The published run took about 4 hours on 22 CPU cores. Older pipelines: `run_v3.js` (12:27) and `run_all.js` (v1, 14:00).
+This writes `tas/progress_64_v4.json` (resumable) and `tas/movie_v4.js`; copy it to `tas/movie.js` to watch it. The v4 run took about 4 hours on 22 CPU cores. Older pipelines: `run_v3.js` (12:27) and `run_all.js` (v1, 14:00).
+
+The published 9:11 movie was made by re-running the same driver as **four independent full runs in parallel** (on a 128-core machine, ~3.5 h wall) and keeping the best — search code unchanged, only compute and fresh cross-level RNG paths:
+
+```bash
+node tools/tas/run_v4.js 64 32 8  _r64 64 8   # beam 64  -> 551.00 s (published)
+node tools/tas/run_v4.js 64 32 8  _r48 48 8   # beam 48  -> 551.50 s
+node tools/tas/run_v4.js 64 24 8  _r96 96 8   # beam 96  -> 553.03 s (width saturates ~64)
+node tools/tas/run_v4.js 64 24 16 _r16 32 16  # M=16 deep cross-level choice -> 551.13 s
+```
+
+The four `tas/movie_r*.js` files are kept as experiment records.
 
 Useful tools in `tools/tas/`: `bench4.js` (benchmark a search setting on all level-start states), `final_stats.js` (WINNING TOTALS of a movie), `determinism.js` (headless vs visual check), `test_trace.js` (aim predictor vs exact simulation), `dpcheck.js` (clear-cost DP vs brute force).
 
@@ -95,7 +107,7 @@ Zuma Deluxe © PopCap Games / Electronic Arts; this is a non-commercial fan proj
 # 1. 从你的游戏目录生成素材（写入 assets/ 和 js/gamedata.js）
 python tools/build_assets.py --game "C:/Program Files (x86)/Steam/steamapps/common/Zuma Deluxe" --openmpt openmpt123路径 --ffmpeg ffmpeg路径
 
-# 2. 检查游戏数据和录像是否一致（应输出 TOTAL TIME 9:38）
+# 2. 检查游戏数据和录像是否一致（应输出 TOTAL TIME 9:11）
 node tools/tas/final_stats.js tas/movie.js
 
 # 3. 启动本地服务器，浏览器打开 http://localhost:8767
@@ -116,7 +128,18 @@ python -m http.server 8767
 node tools/tas/run_v4.js 64 22 4 _v4 64 8   # 种子 64、22 个进程、比较 4 个解、束宽 64、下一关试探束宽 8
 ```
 
-结果写入 `tas/progress_64_v4.json`（可断点续跑）和 `tas/movie_v4.js`，复制为 `tas/movie.js` 即可在游戏里观看。正式录像在 22 个 CPU 核心上跑了约 4 小时。旧版流程：`run_v3.js`（12:27）、`run_all.js`（v1，14:00）。
+结果写入 `tas/progress_64_v4.json`（可断点续跑）和 `tas/movie_v4.js`，复制为 `tas/movie.js` 即可在游戏里观看。v4 在 22 个 CPU 核心上跑了约 4 小时。旧版流程：`run_v3.js`（12:27）、`run_all.js`（v1，14:00）。
+
+正式的 9:11 录像是把同一驱动**并行跑 4 路独立全程**（128 核机器，约 3.5 小时）取最优得到的——搜索代码零改动，只是算力加上重新洗牌的跨关随机路径：
+
+```bash
+node tools/tas/run_v4.js 64 32 8  _r64 64 8   # 束宽 64  -> 551.00 s（正式发布）
+node tools/tas/run_v4.js 64 32 8  _r48 48 8   # 束宽 48  -> 551.50 s
+node tools/tas/run_v4.js 64 24 8  _r96 96 8   # 束宽 96  -> 553.03 s（宽度收益在 64 附近饱和）
+node tools/tas/run_v4.js 64 24 16 _r16 32 16  # M=16 深跨关选择 -> 551.13 s
+```
+
+四份 `tas/movie_r*.js` 保留作为实验记录。
 
 `tools/tas/` 里的常用工具：`bench4.js`（在全部关卡开局状态上测试搜索设置）、`final_stats.js`（输出录像的 WINNING TOTALS）、`determinism.js`（无画面/有画面一致性检查）、`test_trace.js`（瞄准预测与精确模拟对拍）、`dpcheck.js`（清场 DP 与暴力搜索对拍）。
 
