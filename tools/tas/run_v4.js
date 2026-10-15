@@ -16,7 +16,7 @@ const WR = require('./wr.json');
 // usage: node run_v4.js <seed> <workers> <M> <tag> <width> <quickWidth>
 const W = +(process.argv[6] || 32), QW = +(process.argv[7] || 8);
 const BASE = { maxDelay: 6, colorPen: 1.5, coarse: 4 };
-const VAR = [{}, { colorPen: 2 }, { colorPen: 1 }, { maxDelay: 4 }, { settle: 90 }, { K: 20 }, { alpha: 1.5, K: 20 }, { alpha: 1.5, settle: 90 }, { alpha: 1.5, colorPen: 2 }, { alpha: 1.5 }, { alpha: 1.25, K: 20 }, { mu: 60 }];
+const VAR = [{ alpha: 1.5, K: 20, settle: 90, colorPen: 2 }, { alpha: 1.5, K: 20, settle: 90 }, { alpha: 1.5, colorPen: 2, settle: 90 }, { alpha: 1.5, K: 20, colorPen: 2 }, { alpha: 1.5, K: 20 }, {}, { colorPen: 2 }, { settle: 90 }, { K: 20 }, { alpha: 1.5 }, { alpha: 1.25 }, { mu: 60 }];
 const ENSEMBLE = [];
 for (let k = 0; k < NW; k++) ENSEMBLE.push(Object.assign({}, BASE, VAR[k % VAR.length], { width: W, noise: k < VAR.length ? 0 : 30, seed: 1 + k }));
 const QUICK = [0, 1, 2, 3, 4].map(k => Object.assign({}, BASE, { width: QW, noise: k ? 30 : 0, seed: 100 + k }));

@@ -1,4 +1,4 @@
-# ZumaTAS: a faithful Zuma Deluxe replica + Claude TAS (9:02)
+# ZumaTAS: a faithful Zuma Deluxe replica + Claude TAS (8:53)
 
 [English](#english) · [中文](#中文) · Full write-up: [docs/TAS.md](docs/TAS.md) (also in-game as `docs/tas_doc.html`)
 
@@ -8,9 +8,10 @@
 | Claude TAS v3 (`tas/movie_v3.js`) | 12:27 | 459 | 25 | 478 | 21 | 5 |
 | Claude TAS v4 (`tas/movie_v4.js`) | 9:38 (578.26 s) | 565 | 18 | 538 | 15 | 6 |
 | Claude TAS v4.1 (`tas/movie_r64.js`) | 9:11 (551.00 s) | 517 | 11 | 520 | 14 | 7 |
-| **Claude TAS v4.2** (`tas/movie.js`) | **9:02** (542.07 s) | 494 | 20 | 521 | 14 | 5 |
+| Claude TAS v4.2 (`tas/movie_v5b.js`) | 9:02 (542.07 s) | 494 | 20 | 521 | 14 | 5 |
+| **Claude TAS v4.3** (`tas/movie.js`) | **8:53** (533.15 s) | 519 | 9 | 479 | 16 | 7 |
 
-TOTAL TIME is the sum of in-level times shown on the game's WINNING TOTALS screen. v4.1 re-ran the unmodified v4 searcher as four independent full 76-level runs in parallel and kept the best. v4.2 then re-tuned the value function on the 22-level bench: raising the clear-cost weight (`alpha` 1.0 → 1.5, so the search starts shaping the chain for the endgame while it still scores) plus wider candidate lists (`K` 14 → 20) is worth −246 ticks on the bench and reproduces bit-identically across seeds; on the same bench the dormant cascade planner (`planShots`/`pushOut`) and post-target delay fishing (`postDelay`, new optional knob, off by default) were all refuted. With the retuned ensemble and M=16 cross-level choice, three parallel full runs landed at 548.77 / **542.07** / 542.74 s. Level by level the current movie is faster than the world record on 70 of 76 levels, in the same second on 5 and slower on 1 (8-7).
+TOTAL TIME is the sum of in-level times shown on the game's WINNING TOTALS screen. v4.1 re-ran the unmodified v4 searcher as four independent full 76-level runs in parallel and kept the best. v4.2 re-tuned the value function on the 22-level bench (`alpha` 1.5 + `K` 20). v4.3 found that the knob combinations **stack**: `alpha` 1.5 + `K` 20 + `settle` 90 + `colorPen` 2 wins another −203 ticks on the bench (−449 total vs the original base), which with M=16 cross-level choice translates to 533.15 s. A seed re-scan is in progress (16 quick full runs spread 25 s at equal compute; the top seeds are being verified at full power). Level by level the current movie is faster than the world record on 67 of 76 levels and in the same second on 9 — **no level is slower**.
 
 ---
 
@@ -34,7 +35,7 @@ TOTAL TIME is the sum of in-level times shown on the game's WINNING TOTALS scree
 # 1. build the assets from your installation (writes assets/ and js/gamedata.js)
 python tools/build_assets.py --game "C:/Program Files (x86)/Steam/steamapps/common/Zuma Deluxe" --openmpt path/to/openmpt123 --ffmpeg path/to/ffmpeg
 
-# 2. check that your game data matches the recording (should print TOTAL TIME 9:02)
+# 2. check that your game data matches the recording (should print TOTAL TIME 8:53)
 node tools/tas/final_stats.js tas/movie.js
 
 # 3. serve the folder and open http://localhost:8767
@@ -78,6 +79,15 @@ node tools/tas/run_v4.js 64 40 8  _v6  64 8   # combo-heavy ensemble           -
 
 `v4.js` also gained an optional `postDelay`/`postTop` knob (wider delayed firing after the score target is reached); it is off by default — it lost by ~1500 ticks on the bench, but it is kept as a configurable option.
 
+v4.3 found the combinations stack (`alpha` 1.5 + `K` 20 + `settle` 90 + `colorPen` 2: −449 bench ticks vs the original base) and now leads the `VAR` ensemble:
+
+```bash
+node tools/tas/run_v4.js 64 32 16 _v7 64 8   # quad ensemble, M=16 -> 533.15 s (published)
+node tools/tas/run_v4.js 64 32 24 _v7b 64 8  # M=24 -> 537.99 s (M=16 stays best)
+```
+
+Seeds can be re-scanned with quick full runs (`node tools/tas/run_v4.js <seed> 4 2 _q<seed> 16 4`); 16 seeds spread 25 s at equal compute, so the choice of seed matters — the original pick (64, chosen by 1-1 speed alone) is being re-verified against a full-76-level criterion.
+
 Useful tools in `tools/tas/`: `bench4.js` (benchmark a search setting on all level-start states), `final_stats.js` (WINNING TOTALS of a movie), `determinism.js` (headless vs visual check), `test_trace.js` (aim predictor vs exact simulation), `dpcheck.js` (clear-cost DP vs brute force).
 
 ### Layout
@@ -118,7 +128,7 @@ Zuma Deluxe © PopCap Games / Electronic Arts; this is a non-commercial fan proj
 # 1. 从你的游戏目录生成素材（写入 assets/ 和 js/gamedata.js）
 python tools/build_assets.py --game "C:/Program Files (x86)/Steam/steamapps/common/Zuma Deluxe" --openmpt openmpt123路径 --ffmpeg ffmpeg路径
 
-# 2. 检查游戏数据和录像是否一致（应输出 TOTAL TIME 9:02）
+# 2. 检查游戏数据和录像是否一致（应输出 TOTAL TIME 8:53）
 node tools/tas/final_stats.js tas/movie.js
 
 # 3. 启动本地服务器，浏览器打开 http://localhost:8767
@@ -161,6 +171,15 @@ node tools/tas/run_v4.js 64 40 8  _v6  64 8   # 组合密集集成     -> 542.74
 ```
 
 `v4.js` 还新增了可选的 `postDelay`/`postTop` 旋钮（达标后更宽的延迟换色窗口）；默认关闭——测试集上它输了约 1500 tick，但保留为可配置项。
+
+v4.3 发现旋钮组合可以叠加（`alpha` 1.5 + `K` 20 + `settle` 90 + `colorPen` 2：测试集累计 −449），现在排在 `VAR` 集成最前：
+
+```bash
+node tools/tas/run_v4.js 64 32 16 _v7 64 8   # quad 集成, M=16 -> 533.15 s（正式发布）
+node tools/tas/run_v4.js 64 32 24 _v7b 64 8  # M=24 -> 537.99 s（M=16 仍是最优）
+```
+
+种子也可以用快速全程重扫（`node tools/tas/run_v4.js <种子> 4 2 _q<种子> 16 4`）：16 个种子同算力下成绩差 25 秒，选种很重要——当年按 1-1 单关速度选的 64 号正在用全 76 关口径重新校准。
 
 `tools/tas/` 里的常用工具：`bench4.js`（在全部关卡开局状态上测试搜索设置）、`final_stats.js`（输出录像的 WINNING TOTALS）、`determinism.js`（无画面/有画面一致性检查）、`test_trace.js`（瞄准预测与精确模拟对拍）、`dpcheck.js`（清场 DP 与暴力搜索对拍）。
 
