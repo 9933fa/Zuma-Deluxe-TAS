@@ -1,4 +1,4 @@
-# ZumaTAS: a faithful Zuma Deluxe replica + Claude TAS (9:11)
+# ZumaTAS: a faithful Zuma Deluxe replica + Claude TAS (9:02)
 
 [English](#english) · [中文](#中文) · Full write-up: [docs/TAS.md](docs/TAS.md) (also in-game as `docs/tas_doc.html`)
 
@@ -7,9 +7,10 @@
 | World-record TAS by [QuocQuoc](https://www.youtube.com/@quocquoc444) & [DadoYep](https://www.youtube.com/@DadoYep) ([YouTube](https://www.youtube.com/watch?v=9vhNcWftR3Q) / [Bilibili](https://www.bilibili.com/video/BV1qd6pYNECM)) | 11:22 | 685 | 52 | 61 | 25 | 10 |
 | Claude TAS v3 (`tas/movie_v3.js`) | 12:27 | 459 | 25 | 478 | 21 | 5 |
 | Claude TAS v4 (`tas/movie_v4.js`) | 9:38 (578.26 s) | 565 | 18 | 538 | 15 | 6 |
-| **Claude TAS v4 + wide parallel search** (`tas/movie.js`) | **9:11** (551.00 s) | 517 | 11 | 520 | 14 | 7 |
+| Claude TAS v4.1 (`tas/movie_r64.js`) | 9:11 (551.00 s) | 517 | 11 | 520 | 14 | 7 |
+| **Claude TAS v4.2** (`tas/movie.js`) | **9:02** (542.07 s) | 494 | 20 | 521 | 14 | 5 |
 
-TOTAL TIME is the sum of in-level times shown on the game's WINNING TOTALS screen. The current movie was produced by re-running the unmodified v4 searcher as four independent full 76-level runs in parallel (beam widths 32/48/64/96, cross-level candidates up to 16; 112 workers on 128 cores) and keeping the best — the four paths landed within 551.0–553.0 s, so that is roughly what this search converges to at this compute budget. Level by level it is faster than the world record on 64 of 76 levels, in the same second on 11 and slower on 1 (3-3).
+TOTAL TIME is the sum of in-level times shown on the game's WINNING TOTALS screen. v4.1 re-ran the unmodified v4 searcher as four independent full 76-level runs in parallel and kept the best. v4.2 then re-tuned the value function on the 22-level bench: raising the clear-cost weight (`alpha` 1.0 → 1.5, so the search starts shaping the chain for the endgame while it still scores) plus wider candidate lists (`K` 14 → 20) is worth −246 ticks on the bench and reproduces bit-identically across seeds; on the same bench the dormant cascade planner (`planShots`/`pushOut`) and post-target delay fishing (`postDelay`, new optional knob, off by default) were all refuted. With the retuned ensemble and M=16 cross-level choice, three parallel full runs landed at 548.77 / **542.07** / 542.74 s. Level by level the current movie is faster than the world record on 70 of 76 levels, in the same second on 5 and slower on 1 (8-7).
 
 ---
 
@@ -33,7 +34,7 @@ TOTAL TIME is the sum of in-level times shown on the game's WINNING TOTALS scree
 # 1. build the assets from your installation (writes assets/ and js/gamedata.js)
 python tools/build_assets.py --game "C:/Program Files (x86)/Steam/steamapps/common/Zuma Deluxe" --openmpt path/to/openmpt123 --ffmpeg path/to/ffmpeg
 
-# 2. check that your game data matches the recording (should print TOTAL TIME 9:11)
+# 2. check that your game data matches the recording (should print TOTAL TIME 9:02)
 node tools/tas/final_stats.js tas/movie.js
 
 # 3. serve the folder and open http://localhost:8767
@@ -66,6 +67,16 @@ node tools/tas/run_v4.js 64 24 16 _r16 32 16  # M=16 deep cross-level choice -> 
 ```
 
 The four `tas/movie_r*.js` files are kept as experiment records.
+
+v4.2 re-tunes the searcher on the same bench (`tools/tas/bench4.js` on the 22-level test set, ~90 s per config on a many-core box): clear-cost weight `alpha` 1.5 + candidate list `K` 20 was the winning combination (−246 ticks vs base, bit-identical across bench seeds), and those combos now lead the `VAR` ensemble in `run_v4.js`. Three parallel full runs with the retuned ensemble:
+
+```bash
+node tools/tas/run_v4.js 64 32 16 _v5b 64 8   # M=16 deep cross-level choice -> 542.07 s (published)
+node tools/tas/run_v4.js 64 32 8  _v5  64 8   # M=8                            -> 548.77 s
+node tools/tas/run_v4.js 64 40 8  _v6  64 8   # combo-heavy ensemble           -> 542.74 s
+```
+
+`v4.js` also gained an optional `postDelay`/`postTop` knob (wider delayed firing after the score target is reached); it is off by default — it lost by ~1500 ticks on the bench, but it is kept as a configurable option.
 
 Useful tools in `tools/tas/`: `bench4.js` (benchmark a search setting on all level-start states), `final_stats.js` (WINNING TOTALS of a movie), `determinism.js` (headless vs visual check), `test_trace.js` (aim predictor vs exact simulation), `dpcheck.js` (clear-cost DP vs brute force).
 
@@ -107,7 +118,7 @@ Zuma Deluxe © PopCap Games / Electronic Arts; this is a non-commercial fan proj
 # 1. 从你的游戏目录生成素材（写入 assets/ 和 js/gamedata.js）
 python tools/build_assets.py --game "C:/Program Files (x86)/Steam/steamapps/common/Zuma Deluxe" --openmpt openmpt123路径 --ffmpeg ffmpeg路径
 
-# 2. 检查游戏数据和录像是否一致（应输出 TOTAL TIME 9:11）
+# 2. 检查游戏数据和录像是否一致（应输出 TOTAL TIME 9:02）
 node tools/tas/final_stats.js tas/movie.js
 
 # 3. 启动本地服务器，浏览器打开 http://localhost:8767
@@ -140,6 +151,16 @@ node tools/tas/run_v4.js 64 24 16 _r16 32 16  # M=16 深跨关选择 -> 551.13 s
 ```
 
 四份 `tas/movie_r*.js` 保留作为实验记录。
+
+v4.2 在同一测试台（`tools/tas/bench4.js`，22 关测试集，多核机器上每组约 90 秒）上重调了估值：清场代价权重 `alpha` 1.5 + 候选数 `K` 20 是最优组合（相对基线 −246 tick，且各 bench 种子下逐位一致），这些组合现在排在 `run_v4.js` 的 `VAR` 集成最前面。用重调后的集成并行跑了三路全量：
+
+```bash
+node tools/tas/run_v4.js 64 32 16 _v5b 64 8   # M=16 深跨关选择 -> 542.07 s（正式发布）
+node tools/tas/run_v4.js 64 32 8  _v5  64 8   # M=8             -> 548.77 s
+node tools/tas/run_v4.js 64 40 8  _v6  64 8   # 组合密集集成     -> 542.74 s
+```
+
+`v4.js` 还新增了可选的 `postDelay`/`postTop` 旋钮（达标后更宽的延迟换色窗口）；默认关闭——测试集上它输了约 1500 tick，但保留为可配置项。
 
 `tools/tas/` 里的常用工具：`bench4.js`（在全部关卡开局状态上测试搜索设置）、`final_stats.js`（输出录像的 WINNING TOTALS）、`determinism.js`（无画面/有画面一致性检查）、`test_trace.js`（瞄准预测与精确模拟对拍）、`dpcheck.js`（清场 DP 与暴力搜索对拍）。
 
