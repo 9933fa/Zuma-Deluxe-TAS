@@ -54,9 +54,9 @@ footer { text-align: center; color: var(--mute); font-size: 13px; padding: 20px;
 <!-- ============================================================== 中文 -->
 <section data-lang="zh">
 <div class="big">
-  <div><b id="zh-total">9:38</b><span>Claude TAS 总用时（通关画面 TOTAL TIME）</span></div>
+  <div><b id="zh-total">8:51</b><span>Claude TAS 总用时（通关画面 TOTAL TIME）</span></div>
   <div><b>11:22</b><span>此前世界纪录 TAS（<a href="https://www.youtube.com/@quocquoc444" target="_blank" rel="noopener">QuocQuoc</a> &amp; <a href="https://www.youtube.com/@DadoYep" target="_blank" rel="noopener">DadoYep</a>，<a href="#z10">视频</a>）</span></div>
-  <div><b id="zh-diff">−1:44</b><span>快了约 15%</span></div>
+  <div><b id="zh-diff">−2:30</b><span>快了约 22%</span></div>
 </div>
 
 <nav class="toc">
@@ -153,7 +153,11 @@ footer { text-align: center; color: var(--mute); font-size: 13px; padding: 20px;
 <tr><td>v1</td><td>14:00</td><td class="l">回文连锁规划器 + 集束搜索，估值看“已得分 + 连锁潜力 − 清场发数”；每关 22 套设置取最快</td><td class="l">能打通，但达标后清场太慢</td></tr>
 <tr><td>v2</td><td>—</td><td class="l">在 v1 基础上做“局部重算精修”</td><td class="l">慢 3 倍、没有提升，中途放弃</td></tr>
 <tr><td>v3</td><td>12:27</td><td class="l">加入跨关随机数操控（选让下一关更好打的解）</td><td class="l">跨关选择很值钱；但统计显示我们的缝隙分多、连锁少，打法本身有问题</td></tr>
-<tr><td><b>v4</b></td><td><b>9:38</b></td><td class="l">全角度精确瞄准（含擦边缝隙）、区间 DP 清场代价、颜色可用性惩罚、延迟开火换颜色、估值改为“预计结束帧”、束宽 64</td><td class="l">最大的两项提升：颜色控制和更宽的搜索</td></tr>
+<tr><td>v4</td><td>9:38</td><td class="l">全角度精确瞄准（含擦边缝隙）、区间 DP 清场代价、颜色可用性惩罚、延迟开火换颜色、估值改为“预计结束帧”、束宽 64</td><td class="l">最大的两项提升：颜色控制和更宽的搜索</td></tr>
+<tr><td>v4.1</td><td>9:11</td><td class="l">搜索器不变，四路并行全量重跑（束宽 32/48/64/96、跨关候选至 16；128 核 112 进程），取四路最优</td><td class="l">宽搜索与跨关随机路径方差的收益；四路收敛于 551~553 s，宽度收益约在 64 饱和</td></tr>
+<tr><td>v4.2</td><td>9:02</td><td class="l">测试集重调估值：清场代价权重 alpha 1.5 + 候选数 K 20（连锁规划器/达标后延迟换色均在同一测试集被证伪），组合进集成前置，M=16 深跨关选择，三路并行取最优</td><td class="l">调权重比加机制值钱：一边攒分一边给清场整形；三路 548.8 / 542.1 / 542.7 s</td></tr>
+<tr><td>v4.3</td><td>8:53</td><td class="l">发现旋钮组合可叠加：alpha 1.5 + K 20 + settle 90 + colorPen 2（测试集累计 −449），前置进集成；M=16；种子开始按全 76 关口径重扫</td><td class="l">组合可以叠加（不像 mu 与 alpha 会互相抵消）；16 个种子同算力差 25 秒，选种是独立的大杠杆</td></tr>
+<tr><td><b>v4.4</b></td><td><b>8:51</b></td><td class="l">种子按全 76 关口径重扫完成（32 种快扫 + 头部种子全功率验证），24 号种胜出</td><td class="l">快扫排名与全功率结果不完全一致（种子 4/23 都未兑现），但重新选种仍净赚 1.2 秒；按 1-1 单关选种确实吃亏</td></tr>
 </table>
 <h3>试过但没用的想法</h3>
 <ul>
@@ -176,9 +180,13 @@ footer { text-align: center; color: var(--mute); font-size: 13px; padding: 20px;
 <tr><th></th><th>TOTAL TIME</th><th>COMBOS</th><th>COINS</th><th>GAPS</th><th>MAX CHAIN</th><th>MAX COMBO</th></tr>
 <tr><td class="l">世界纪录 TAS</td><td>11:22</td><td>685</td><td>52</td><td>61</td><td>25</td><td>10</td></tr>
 <tr><td class="l">Claude v3</td><td>12:27</td><td>459</td><td>25</td><td>478</td><td>21</td><td>5</td></tr>
-<tr><td class="l"><b>Claude v4</b></td><td><b>9:38</b></td><td>565</td><td>18</td><td>538</td><td>15</td><td>6</td></tr>
+<tr><td class="l">Claude v4</td><td>9:38</td><td>565</td><td>18</td><td>538</td><td>15</td><td>6</td></tr>
+<tr><td class="l">Claude v4.1</td><td>9:11</td><td>517</td><td>11</td><td>520</td><td>14</td><td>7</td></tr>
+<tr><td class="l">Claude v4.2</td><td>9:02</td><td>494</td><td>20</td><td>521</td><td>14</td><td>5</td></tr>
+<tr><td class="l">Claude v4.3</td><td>8:53</td><td>519</td><td>9</td><td>479</td><td>16</td><td>7</td></tr>
+<tr><td class="l"><b>Claude v4.4</b></td><td><b>8:51</b></td><td>501</td><td>8</td><td>508</td><td>15</td><td>5</td></tr>
 </table>
-<p>两份 TAS 的风格完全不同。人类 TAS 擅长摆出 8~10 层的超长连锁，一次把整条链吃光；Claude TAS 的连锁最长只有 6 层、金币也拿得少，但它<b>平均 4.6 秒就达标</b>，然后用精确的颜色控制快速清场。全部 76 关逐关比较，Claude 更快 56 关、同一秒 14 关、更慢 6 关（3-1、8-7、9-3、10-5、11-1、12-3）。</p>
+<p>两份 TAS 的风格完全不同。人类 TAS 擅长摆出 8~10 层的超长连锁，一次把整条链吃光；Claude TAS 的连锁最长只有 5 层、金币也拿得少，但它<b>平均 4.5 秒就达标</b>，然后用精确的颜色控制快速清场。全部 76 关逐关比较，Claude 更快 70 关、同一秒 4 关、更慢 2 关（9-6、12-6）。</p>
 <div class="note">世界纪录的每关时间取自录像里每关结束后的统计画面，按原版规则显示为整秒（向下取整），数据在 <code>tas/wr_times.js</code>。比较时把 Claude 的用时也按同样规则取整。</div>
 
 <h2 id="z11">11　每关成绩</h2>
@@ -205,7 +213,7 @@ footer { text-align: center; color: var(--mute); font-size: 13px; padding: 20px;
 <li><b>统计画面会说话。</b>他们的通关统计是连锁 685、缝隙 61；我们 v3 是连锁 459、缝隙 478。这说明我们在追逐缝隙奖励的分数，而不是在高效地消球。这个对比直接推动了 v4 的重写。</li>
 <li><b>CHAIN 连击奖励值得经营。</b>他们打出过连续 25 发都消球的连击。连击奖励每发 10n+50 分，越往后越值钱，所以 TAS 尽量做到“发发有效”，非必要不弃球。</li>
 <li><b>金币不是装饰。</b>他们吃了 52 枚金币。后期一枚金币相当于目标分的 16%，这让我们把“打金币”放进了每一步的候选动作。</li>
-<li><b>超长连锁是可以设计出来的。</b>他们能把链摆成 8~10 层连锁，一次吃光整条链，说明“边连锁边补色”在原版的发射频率下是做得到的。我们的最长连锁目前只有 6 层，这是 Claude TAS 还落后于人类 TAS 的地方，也是下一步最值得学习的方向。</li>
+<li><b>超长连锁是可以设计出来的。</b>他们能把链摆成 8~10 层连锁，一次吃光整条链，说明“边连锁边补色”在原版的发射频率下是做得到的。我们的最长连锁目前只有 5 层，这是 Claude TAS 还落后于人类 TAS 的地方，也是下一步最值得学习的方向。</li>
 <li><b>一把可靠的尺子。</b>他们每关结束后的统计画面给出了每一关的用时，让我们能逐关比较、找出最慢的关卡重点改进。我们甚至从录像里学会了判断一关的开始和结束：进度条由绿变黄就是开局，结束奖励的爆炸出现前 0.2 秒就是终点。</li>
 </ol>
 <p>Claude TAS 最后用了一种和他们很不一样的打法（尽早达标 + 精确的颜色控制）超过了这个纪录，但这条路是沿着他们留下的路标找到的。再次感谢两位作者。</p>
@@ -214,9 +222,9 @@ footer { text-align: center; color: var(--mute); font-size: 13px; padding: 20px;
 <!-- ============================================================== English -->
 <section data-lang="en">
 <div class="big">
-  <div><b id="en-total">9:38</b><span>Claude TAS total (TOTAL TIME on the final screen)</span></div>
+  <div><b id="en-total">8:51</b><span>Claude TAS total (TOTAL TIME on the final screen)</span></div>
   <div><b>11:22</b><span>Previous world-record TAS (<a href="https://www.youtube.com/@quocquoc444" target="_blank" rel="noopener">QuocQuoc</a> &amp; <a href="https://www.youtube.com/@DadoYep" target="_blank" rel="noopener">DadoYep</a>, <a href="#e10">video</a>)</span></div>
-  <div><b id="en-diff">−1:44</b><span>about 15% faster</span></div>
+  <div><b id="en-diff">−2:30</b><span>about 22% faster</span></div>
 </div>
 
 <nav class="toc">
@@ -313,7 +321,11 @@ beam search: keep the 64 best states at each depth and expand them again, until 
 <tr><td>v1</td><td>14:00</td><td class="l">Palindrome cascade planner + beam search, valued by “score so far + cascade potential − shots to clear”; best of 22 settings per level</td><td class="l">Finishes the game, but the clean-up after the target is too slow</td></tr>
 <tr><td>v2</td><td>—</td><td class="l">v1 plus local re-optimisation</td><td class="l">3× slower and no better; abandoned</td></tr>
 <tr><td>v3</td><td>12:27</td><td class="l">Cross-level RNG manipulation (pick the solution that makes the next level easier)</td><td class="l">Cross-level choice is valuable, but the stats (many gap bonuses, few combos) showed the play style itself was wrong</td></tr>
-<tr><td><b>v4</b></td><td><b>9:38</b></td><td class="l">Exact all-angle aiming (with grazing gaps), interval-DP clean-up cost, colour-availability penalty, delayed firing to re-roll colours, value = estimated finishing frame, beam width 64</td><td class="l">The two biggest gains: colour control and a wider search</td></tr>
+<tr><td>v4</td><td>9:38</td><td class="l">Exact all-angle aiming (with grazing gaps), interval-DP clean-up cost, colour-availability penalty, delayed firing to re-roll colours, value = estimated finishing frame, beam width 64</td><td class="l">The two biggest gains: colour control and a wider search</td></tr>
+<tr><td>v4.1</td><td>9:11</td><td class="l">same searcher, re-run as four parallel full runs (beams 32/48/64/96, cross-level candidates up to 16; 112 workers on 128 cores), best of four kept</td><td class="l">gains from wide search + cross-level RNG-path variance; the four runs converge to 551-553 s, width saturates around 64</td></tr>
+<tr><td>v4.2</td><td>9:02</td><td class="l">value function re-tuned on the bench: clear-cost weight alpha 1.5 + candidate list K 20 (the cascade planner and post-target delay fishing were both refuted on the same bench), combos lead the ensemble, M=16 cross-level choice, best of three parallel runs</td><td class="l">re-weighing beats new machinery: shape the chain for the endgame while still scoring; three runs land at 548.8 / 542.1 / 542.7 s</td></tr>
+<tr><td>v4.3</td><td>8:53</td><td class="l">knob combinations stack: alpha 1.5 + K 20 + settle 90 + colorPen 2 (−449 bench ticks total) lead the ensemble; M=16; seeds re-scanned on a full-76-level criterion</td><td class="l">combinations stack (unlike mu vs alpha, which cancel); 16 seeds spread 25 s at equal compute — seed choice is its own lever</td></tr>
+<tr><td><b>v4.4</b></td><td><b>8:51</b></td><td class="l">seed re-scan finished on the full-76-level criterion (32 quick scans + full-power verification of the leaders); seed 24 wins</td><td class="l">quick-scan rank and full-power results do not fully agree (seeds 4 and 23 did not hold up), but re-picking the seed still nets 1.2 s; picking by 1-1 speed alone really did cost time</td></tr>
 </table>
 <h3>Ideas that did not help</h3>
 <ul>
@@ -336,9 +348,13 @@ All per-level comparison times in this project come from that video. What we lea
 <tr><th></th><th>TOTAL TIME</th><th>COMBOS</th><th>COINS</th><th>GAPS</th><th>MAX CHAIN</th><th>MAX COMBO</th></tr>
 <tr><td class="l">World-record TAS</td><td>11:22</td><td>685</td><td>52</td><td>61</td><td>25</td><td>10</td></tr>
 <tr><td class="l">Claude v3</td><td>12:27</td><td>459</td><td>25</td><td>478</td><td>21</td><td>5</td></tr>
-<tr><td class="l"><b>Claude v4</b></td><td><b>9:38</b></td><td>565</td><td>18</td><td>538</td><td>15</td><td>6</td></tr>
+<tr><td class="l">Claude v4</td><td>9:38</td><td>565</td><td>18</td><td>538</td><td>15</td><td>6</td></tr>
+<tr><td class="l">Claude v4.1</td><td>9:11</td><td>517</td><td>11</td><td>520</td><td>14</td><td>7</td></tr>
+<tr><td class="l">Claude v4.2</td><td>9:02</td><td>494</td><td>20</td><td>521</td><td>14</td><td>5</td></tr>
+<tr><td class="l">Claude v4.3</td><td>8:53</td><td>519</td><td>9</td><td>479</td><td>16</td><td>7</td></tr>
+<tr><td class="l"><b>Claude v4.4</b></td><td><b>8:51</b></td><td>501</td><td>8</td><td>508</td><td>15</td><td>5</td></tr>
 </table>
-<p>The two TAS runs play very differently. The human TAS builds huge 8–10 layer cascades that eat a whole chain at once. Claude's longest cascade is only 6 layers and it collects fewer coins, but it <b>reaches the target after 4.6 s on average</b> and then clears the rest quickly with precise colour control. Comparing all 76 levels one by one, Claude is faster on 56, within the same second on 14, and slower on 6 (3-1, 8-7, 9-3, 10-5, 11-1, 12-3).</p>
+<p>The two TAS runs play very differently. The human TAS builds huge 8–10 layer cascades that eat a whole chain at once. Claude's longest cascade is only 5 layers and it collects fewer coins, but it <b>reaches the target after 4.5 s on average</b> and then clears the rest quickly with precise colour control. Comparing all 76 levels one by one, Claude is faster on 70, within the same second on 4, and slower on 2 (9-6, 12-6).</p>
 <div class="note">The WR's per-level times come from the stats screen shown after each level in its video. Like the original game, it shows whole seconds (rounded down). The data is in <code>tas/wr_times.js</code>, and Claude's times are rounded the same way when comparing.</div>
 
 <h2 id="e11">11　Per-level times</h2>
@@ -365,7 +381,7 @@ All per-level comparison times in this project come from that video. What we lea
 <li><b>The stats screen tells a story.</b> Their final stats were 685 combos and 61 gaps; our v3 had 459 combos and 478 gaps. We were chasing gap-bonus points instead of clearing balls efficiently. That comparison is what triggered the v4 rewrite.</li>
 <li><b>The CHAIN bonus is worth nursing.</b> They reached a chain of 25 shots in a row that all cleared balls. The bonus is 10n+50 points per shot and keeps growing, so the TAS tries to make every shot count and only throws a ball away when it has to.</li>
 <li><b>Coins are not decoration.</b> They collected 52 coins. In late levels one coin is 16% of the target score, so hitting the coin became one of the candidate moves at every step.</li>
-<li><b>Huge cascades can be built on purpose.</b> They arrange the chain into 8–10 layer cascades that eat an entire chain at once, which proves that fixing colours while a cascade is running is possible at the original firing rate. Our longest cascade is still only 6 layers. This is where Claude TAS still trails the human TAS, and the most promising thing left to learn from them.</li>
+<li><b>Huge cascades can be built on purpose.</b> They arrange the chain into 8–10 layer cascades that eat an entire chain at once, which proves that fixing colours while a cascade is running is possible at the original firing rate. Our longest cascade is still only 5 layers. This is where Claude TAS still trails the human TAS, and the most promising thing left to learn from them.</li>
 <li><b>A reliable ruler.</b> The stats screen after each of their levels gave us a per-level time to compare against, so we could find our slowest levels and work on those first. We even learnt from their video how to read a level's start and end: the progress bar turning from green to yellow marks the start, and the level ends 0.2 s before the bonus explosions appear.</li>
 </ol>
 <p>Claude TAS ended up beating the record with a very different style (reach the target early, then precise colour control), but it found that path by following the signposts they left. Thanks again to both of them.</p>

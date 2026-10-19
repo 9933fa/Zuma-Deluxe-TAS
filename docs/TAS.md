@@ -12,9 +12,9 @@
 
 一个电脑“工具辅助速通”是怎样想出来、怎样打出来的
 
-| **9:38** | **11:22** | **−1:44** |
+| **8:51** | **11:22** | **−2:30** |
 |---|---|---|
-| Claude TAS 总用时（通关画面 TOTAL TIME） | 此前世界纪录 TAS（[QuocQuoc](https://www.youtube.com/@quocquoc444) & [DadoYep](https://www.youtube.com/@DadoYep)，[视频](#z10)） | 快了约 15% |
+| Claude TAS 总用时（通关画面 TOTAL TIME） | 此前世界纪录 TAS（[QuocQuoc](https://www.youtube.com/@quocquoc444) & [DadoYep](https://www.youtube.com/@DadoYep)，[视频](#z10)） | 快了约 22% |
 
 [1 这是什么](#z1) · [2 规则](#z2) · [3 游戏机制](#z3) · [4 射击技巧](#z4) · [5 得分策略](#z5) · [6 路线规划](#z6) · [7 决策树与搜索](#z7) · [8 随机数与种子](#z8) · [9 版本迭代](#z9) · [10 与世界纪录对比](#z10) · [11 每关成绩](#z11) · [12 怎么观看](#z12) · [13 实现方式](#z13) · [14 致谢](#z14)
 
@@ -140,7 +140,11 @@ TAS 不背固定套路，每一关、每一种出球都重新计算。它在每�
 | v1 | 14:00 | 回文连锁规划器 + 集束搜索，估值看“已得分 + 连锁潜力 − 清场发数”；每关 22 套设置取最快 | 能打通，但达标后清场太慢 |
 | v2 | — | 在 v1 基础上做“局部重算精修” | 慢 3 倍、没有提升，中途放弃 |
 | v3 | 12:27 | 加入跨关随机数操控（选让下一关更好打的解） | 跨关选择很值钱；但统计显示我们的缝隙分多、连锁少，打法本身有问题 |
-| <b>v4</b> | <b>9:38</b> | 全角度精确瞄准（含擦边缝隙）、区间 DP 清场代价、颜色可用性惩罚、延迟开火换颜色、估值改为“预计结束帧”、束宽 64 | 最大的两项提升：颜色控制和更宽的搜索 |
+| v4 | 9:38 | 全角度精确瞄准（含擦边缝隙）、区间 DP 清场代价、颜色可用性惩罚、延迟开火换颜色、估值改为“预计结束帧”、束宽 64 | 最大的两项提升：颜色控制和更宽的搜索 |
+| v4.1 | 9:11 | 搜索器不变，四路并行全量重跑（束宽 32/48/64/96、跨关候选至 16；128 核 112 进程），取四路最优 | 宽搜索与跨关随机路径方差的收益；四路收敛于 551~553 s，宽度收益约在 64 饱和 |
+| v4.2 | 9:02 | 测试集重调估值：清场代价权重 alpha 1.5 + 候选数 K 20（连锁规划器/达标后延迟换色均在同一测试集被证伪），组合进集成前置，M=16 深跨关选择，三路并行取最优 | 调权重比加机制值钱：一边攒分一边给清场整形；三路 548.8 / 542.1 / 542.7 s |
+| v4.3 | 8:53 | 发现旋钮组合可叠加：alpha 1.5 + K 20 + settle 90 + colorPen 2（测试集累计 −449），前置进集成；M=16；种子开始按全 76 关口径重扫 | 组合可以叠加（不像 mu 与 alpha 会互相抵消）；16 个种子同算力差 25 秒，选种是独立的大杠杆 |
+| <b>v4.4</b> | <b>8:51</b> | 种子按全 76 关口径重扫完成（32 种快扫 + 头部种子全功率验证），24 号种胜出 | 快扫排名与全功率结果不完全一致（种子 4/23 都未兑现），但重新选种仍净赚 1.2 秒；按 1-1 单关选种确实吃亏 |
 
 ### 试过但没用的想法
 
@@ -166,9 +170,13 @@ TAS 不背固定套路，每一关、每一种出球都重新计算。它在每�
 |---|---|---|---|---|---|---|
 | 世界纪录 TAS | 11:22 | 685 | 52 | 61 | 25 | 10 |
 | Claude v3 | 12:27 | 459 | 25 | 478 | 21 | 5 |
-| <b>Claude v4</b> | <b>9:38</b> | 565 | 18 | 538 | 15 | 6 |
+| Claude v4 | 9:38 | 565 | 18 | 538 | 15 | 6 |
+| Claude v4.1 | 9:11 | 517 | 11 | 520 | 14 | 7 |
+| Claude v4.2 | 9:02 | 494 | 20 | 521 | 14 | 5 |
+| Claude v4.3 | 8:53 | 519 | 9 | 479 | 16 | 7 |
+| <b>Claude v4.4</b> | <b>8:51</b> | 501 | 8 | 508 | 15 | 5 |
 
-两份 TAS 的风格完全不同。人类 TAS 擅长摆出 8~10 层的超长连锁，一次把整条链吃光；Claude TAS 的连锁最长只有 6 层、金币也拿得少，但它<b>平均 4.6 秒就达标</b>，然后用精确的颜色控制快速清场。全部 76 关逐关比较，Claude 更快 56 关、同一秒 14 关、更慢 6 关（3-1、8-7、9-3、10-5、11-1、12-3）。
+两份 TAS 的风格完全不同。人类 TAS 擅长摆出 8~10 层的超长连锁，一次把整条链吃光；Claude TAS 的连锁最长只有 5 层、金币也拿得少，但它<b>平均 4.5 秒就达标</b>，然后用精确的颜色控制快速清场。全部 76 关逐关比较，Claude 更快 70 关、同一秒 4 关、更慢 2 关（9-6、12-6）。
 
 > 世界纪录的每关时间取自录像里每关结束后的统计画面，按原版规则显示为整秒（向下取整），数据在 `tas/wr_times.js`。比较时把 Claude 的用时也按同样规则取整。
 
@@ -178,83 +186,83 @@ TAS 不背固定套路，每一关、每一种出球都重新计算。它在每�
 
 | 关卡 | 地图 | Claude | 世界纪录 | 比较 |
 |---|---|---|---|---|
-| 1-1 | Spiral of Doom | 4.42 | 0:06 | 更快 |
-| 1-2 | Osprey Talon | 3.60 | 0:05 | 更快 |
-| 1-3 | Riverbed Mosaic | 4.99 | 0:05 | 更快 |
-| 1-4 | Breath of Ehecatl | 7.21 | 0:07 | 同一秒 |
-| 1-5 | Dark Vortex | 7.33 | 0:08 | 更快 |
-| 2-1 | When Spirals Attack | 6.80 | 0:08 | 更快 |
-| 2-2 | Mud Slide | 6.13 | 0:06 | 同一秒 |
-| 2-3 | Rorschach | 5.43 | 0:07 | 更快 |
-| 2-4 | Mouth of Centeotl | 6.44 | 0:07 | 更快 |
-| 2-5 | Snake Pit | 7.66 | 0:07 | 同一秒 |
-| 3-1 | Landing Pad | 8.24 | 0:07 | 更慢 |
-| 3-2 | Altar of Tlaloc | 6.75 | 0:10 | 更快 |
-| 3-3 | Codex of Mixtec | 6.94 | 0:08 | 更快 |
-| 3-4 | Shrine of Quetzalcoatl | 7.60 | 0:08 | 更快 |
-| 3-5 | Mirror Serpent | 8.85 | 0:09 | 更快 |
-| 4-1 | Spiral of Doom | 6.83 | 0:07 | 更快 |
-| 4-2 | Osprey Talon | 5.11 | 0:07 | 更快 |
-| 4-3 | Riverbed Mosaic | 6.81 | 0:08 | 更快 |
-| 4-4 | Breath of Ehecatl | 7.14 | 0:07 | 同一秒 |
-| 4-5 | Dark Vortex | 6.52 | 0:09 | 更快 |
-| 4-6 | Switchback | 6.11 | 0:09 | 更快 |
-| 5-1 | When Spirals Attack | 7.59 | 0:09 | 更快 |
-| 5-2 | Mud Slide | 5.74 | 0:09 | 更快 |
-| 5-3 | Rorschach | 6.43 | 0:09 | 更快 |
-| 5-4 | Mouth of Centeotl | 7.52 | 0:08 | 更快 |
-| 5-5 | Snake Pit | 6.40 | 0:10 | 更快 |
-| 5-6 | Sand Garden | 7.57 | 0:10 | 更快 |
-| 6-1 | Landing Pad | 8.75 | 0:08 | 同一秒 |
-| 6-2 | Altar of Tlaloc | 8.22 | 0:09 | 更快 |
-| 6-3 | Codex of Mixtec | 9.49 | 0:10 | 更快 |
-| 6-4 | Shrine of Quetzalcoatl | 6.09 | 0:09 | 更快 |
-| 6-5 | Mirror Serpent | 9.13 | 0:10 | 更快 |
-| 6-6 | Sun Stone | 7.08 | 0:09 | 更快 |
-| 7-1 | Spiral of Doom | 5.61 | 0:07 | 更快 |
-| 7-2 | Osprey Talon | 6.08 | 0:08 | 更快 |
-| 7-3 | Riverbed Mosaic | 5.77 | 0:07 | 更快 |
-| 7-4 | Breath of Ehecatl | 6.74 | 0:08 | 更快 |
-| 7-5 | Dark Vortex | 9.06 | 0:09 | 同一秒 |
-| 7-6 | Switchback | 7.60 | 0:07 | 同一秒 |
-| 7-7 | Long Range | 7.18 | 0:09 | 更快 |
-| 8-1 | When Spirals Attack | 6.99 | 0:07 | 更快 |
-| 8-2 | Mud Slide | 7.08 | 0:08 | 更快 |
-| 8-3 | Rorschach | 6.99 | 0:08 | 更快 |
-| 8-4 | Mouth of Centeotl | 9.16 | 0:09 | 同一秒 |
-| 8-5 | Snake Pit | 6.02 | 0:10 | 更快 |
-| 8-6 | Sand Garden | 8.65 | 0:09 | 更快 |
-| 8-7 | Lair of the Mud Snake | 10.12 | 0:07 | 更慢 |
-| 9-1 | Landing Pad | 7.02 | 0:09 | 更快 |
-| 9-2 | Altar of Tlaloc | 8.89 | 0:08 | 同一秒 |
-| 9-3 | Codex of Mixtec | 10.51 | 0:08 | 更慢 |
-| 9-4 | Shrine of Quetzalcoatl | 7.01 | 0:10 | 更快 |
-| 9-5 | Mirror Serpent | 10.63 | 0:10 | 同一秒 |
-| 9-6 | Sun Stone | 8.37 | 0:08 | 同一秒 |
-| 9-7 | Zumaic Exodus | 7.54 | 0:09 | 更快 |
-| 10-1 | Spiral of Doom | 8.73 | 0:09 | 更快 |
-| 10-2 | Osprey Talon | 6.34 | 0:08 | 更快 |
-| 10-3 | Riverbed Mosaic | 7.33 | 0:09 | 更快 |
-| 10-4 | Breath of Ehecatl | 6.66 | 0:09 | 更快 |
-| 10-5 | Dark Vortex | 12.28 | 0:10 | 更慢 |
-| 10-6 | Switchback | 6.94 | 0:09 | 更快 |
-| 10-7 | Long Range | 8.19 | 0:09 | 更快 |
-| 11-1 | When Spirals Attack | 10.47 | 0:09 | 更慢 |
-| 11-2 | Mud Slide | 9.06 | 0:10 | 更快 |
-| 11-3 | Rorschach | 6.93 | 0:09 | 更快 |
-| 11-4 | Mouth of Centeotl | 7.79 | 0:08 | 更快 |
-| 11-5 | Snake Pit | 8.45 | 0:11 | 更快 |
-| 11-6 | Sand Garden | 8.34 | 0:10 | 更快 |
-| 11-7 | Lair of the Mud Snake | 8.41 | 0:09 | 更快 |
-| 12-1 | Landing Pad | 9.88 | 0:09 | 同一秒 |
-| 12-2 | Altar of Tlaloc | 9.89 | 0:09 | 同一秒 |
-| 12-3 | Codex of Mixtec | 9.33 | 0:08 | 更慢 |
-| 12-4 | Shrine of Quetzalcoatl | 8.87 | 0:10 | 更快 |
-| 12-5 | Mirror Serpent | 9.41 | 0:10 | 更快 |
-| 12-6 | Sun Stone | 8.35 | 0:08 | 同一秒 |
-| 12-7 | Zumaic Exodus | 5.80 | 0:10 | 更快 |
-| 13-1 | space | 10.87 | 0:15 | 更快 |
-| **合计** | | **9:38.26** | **11:22** | |
+| 1-1 | Spiral of Doom | 5.11 | 0:06 | 更快 |
+| 1-2 | Osprey Talon | 4.24 | 0:05 | 更快 |
+| 1-3 | Riverbed Mosaic | 3.65 | 0:05 | 更快 |
+| 1-4 | Breath of Ehecatl | 5.66 | 0:07 | 更快 |
+| 1-5 | Dark Vortex | 7.50 | 0:08 | 更快 |
+| 2-1 | When Spirals Attack | 6.32 | 0:08 | 更快 |
+| 2-2 | Mud Slide | 4.75 | 0:06 | 更快 |
+| 2-3 | Rorschach | 5.32 | 0:07 | 更快 |
+| 2-4 | Mouth of Centeotl | 4.61 | 0:07 | 更快 |
+| 2-5 | Snake Pit | 6.55 | 0:07 | 更快 |
+| 3-1 | Landing Pad | 6.30 | 0:07 | 更快 |
+| 3-2 | Altar of Tlaloc | 7.36 | 0:10 | 更快 |
+| 3-3 | Codex of Mixtec | 7.31 | 0:08 | 更快 |
+| 3-4 | Shrine of Quetzalcoatl | 5.99 | 0:08 | 更快 |
+| 3-5 | Mirror Serpent | 6.86 | 0:09 | 更快 |
+| 4-1 | Spiral of Doom | 6.35 | 0:07 | 更快 |
+| 4-2 | Osprey Talon | 4.99 | 0:07 | 更快 |
+| 4-3 | Riverbed Mosaic | 6.32 | 0:08 | 更快 |
+| 4-4 | Breath of Ehecatl | 6.72 | 0:07 | 更快 |
+| 4-5 | Dark Vortex | 7.39 | 0:09 | 更快 |
+| 4-6 | Switchback | 6.45 | 0:09 | 更快 |
+| 5-1 | When Spirals Attack | 5.98 | 0:09 | 更快 |
+| 5-2 | Mud Slide | 5.92 | 0:09 | 更快 |
+| 5-3 | Rorschach | 7.71 | 0:09 | 更快 |
+| 5-4 | Mouth of Centeotl | 5.47 | 0:08 | 更快 |
+| 5-5 | Snake Pit | 7.13 | 0:10 | 更快 |
+| 5-6 | Sand Garden | 6.90 | 0:10 | 更快 |
+| 6-1 | Landing Pad | 5.92 | 0:08 | 更快 |
+| 6-2 | Altar of Tlaloc | 5.95 | 0:09 | 更快 |
+| 6-3 | Codex of Mixtec | 8.51 | 0:10 | 更快 |
+| 6-4 | Shrine of Quetzalcoatl | 7.17 | 0:09 | 更快 |
+| 6-5 | Mirror Serpent | 7.13 | 0:10 | 更快 |
+| 6-6 | Sun Stone | 7.25 | 0:09 | 更快 |
+| 7-1 | Spiral of Doom | 6.37 | 0:07 | 更快 |
+| 7-2 | Osprey Talon | 6.52 | 0:08 | 更快 |
+| 7-3 | Riverbed Mosaic | 6.15 | 0:07 | 更快 |
+| 7-4 | Breath of Ehecatl | 6.81 | 0:08 | 更快 |
+| 7-5 | Dark Vortex | 7.08 | 0:09 | 更快 |
+| 7-6 | Switchback | 6.86 | 0:07 | 更快 |
+| 7-7 | Long Range | 5.33 | 0:09 | 更快 |
+| 8-1 | When Spirals Attack | 7.00 | 0:07 | 同一秒 |
+| 8-2 | Mud Slide | 5.23 | 0:08 | 更快 |
+| 8-3 | Rorschach | 6.73 | 0:08 | 更快 |
+| 8-4 | Mouth of Centeotl | 7.86 | 0:09 | 更快 |
+| 8-5 | Snake Pit | 6.89 | 0:10 | 更快 |
+| 8-6 | Sand Garden | 7.85 | 0:09 | 更快 |
+| 8-7 | Lair of the Mud Snake | 7.97 | 0:07 | 同一秒 |
+| 9-1 | Landing Pad | 6.71 | 0:09 | 更快 |
+| 9-2 | Altar of Tlaloc | 7.44 | 0:08 | 更快 |
+| 9-3 | Codex of Mixtec | 7.11 | 0:08 | 更快 |
+| 9-4 | Shrine of Quetzalcoatl | 9.47 | 0:10 | 更快 |
+| 9-5 | Mirror Serpent | 8.93 | 0:10 | 更快 |
+| 9-6 | Sun Stone | 9.89 | 0:08 | 更慢 |
+| 9-7 | Zumaic Exodus | 7.75 | 0:09 | 更快 |
+| 10-1 | Spiral of Doom | 7.39 | 0:09 | 更快 |
+| 10-2 | Osprey Talon | 7.18 | 0:08 | 更快 |
+| 10-3 | Riverbed Mosaic | 6.02 | 0:09 | 更快 |
+| 10-4 | Breath of Ehecatl | 9.73 | 0:09 | 同一秒 |
+| 10-5 | Dark Vortex | 8.53 | 0:10 | 更快 |
+| 10-6 | Switchback | 7.91 | 0:09 | 更快 |
+| 10-7 | Long Range | 8.06 | 0:09 | 更快 |
+| 11-1 | When Spirals Attack | 6.79 | 0:09 | 更快 |
+| 11-2 | Mud Slide | 7.52 | 0:10 | 更快 |
+| 11-3 | Rorschach | 8.49 | 0:09 | 更快 |
+| 11-4 | Mouth of Centeotl | 7.17 | 0:08 | 更快 |
+| 11-5 | Snake Pit | 6.69 | 0:11 | 更快 |
+| 11-6 | Sand Garden | 8.16 | 0:10 | 更快 |
+| 11-7 | Lair of the Mud Snake | 7.48 | 0:09 | 更快 |
+| 12-1 | Landing Pad | 8.50 | 0:09 | 更快 |
+| 12-2 | Altar of Tlaloc | 7.87 | 0:09 | 更快 |
+| 12-3 | Codex of Mixtec | 8.22 | 0:08 | 同一秒 |
+| 12-4 | Shrine of Quetzalcoatl | 8.12 | 0:10 | 更快 |
+| 12-5 | Mirror Serpent | 8.65 | 0:10 | 更快 |
+| 12-6 | Sun Stone | 10.26 | 0:08 | 更慢 |
+| 12-7 | Zumaic Exodus | 5.92 | 0:10 | 更快 |
+| 13-1 | space | 8.55 | 0:15 | 更快 |
+| **合计** | | **8:51.95** | **11:22** | |
 
 <a name="z12"></a>
 
@@ -282,7 +290,7 @@ TAS 不背固定套路，每一关、每一种出球都重新计算。它在每�
 2. <b>统计画面会说话。</b>他们的通关统计是连锁 685、缝隙 61；我们 v3 是连锁 459、缝隙 478。这说明我们在追逐缝隙奖励的分数，而不是在高效地消球。这个对比直接推动了 v4 的重写。
 3. <b>CHAIN 连击奖励值得经营。</b>他们打出过连续 25 发都消球的连击。连击奖励每发 10n+50 分，越往后越值钱，所以 TAS 尽量做到“发发有效”，非必要不弃球。
 4. <b>金币不是装饰。</b>他们吃了 52 枚金币。后期一枚金币相当于目标分的 16%，这让我们把“打金币”放进了每一步的候选动作。
-5. <b>超长连锁是可以设计出来的。</b>他们能把链摆成 8~10 层连锁，一次吃光整条链，说明“边连锁边补色”在原版的发射频率下是做得到的。我们的最长连锁目前只有 6 层，这是 Claude TAS 还落后于人类 TAS 的地方，也是下一步最值得学习的方向。
+5. <b>超长连锁是可以设计出来的。</b>他们能把链摆成 8~10 层连锁，一次吃光整条链，说明“边连锁边补色”在原版的发射频率下是做得到的。我们的最长连锁目前只有 5 层，这是 Claude TAS 还落后于人类 TAS 的地方，也是下一步最值得学习的方向。
 6. <b>一把可靠的尺子。</b>他们每关结束后的统计画面给出了每一关的用时，让我们能逐关比较、找出最慢的关卡重点改进。我们甚至从录像里学会了判断一关的开始和结束：进度条由绿变黄就是开局，结束奖励的爆炸出现前 0.2 秒就是终点。
 
 Claude TAS 最后用了一种和他们很不一样的打法（尽早达标 + 精确的颜色控制）超过了这个纪录，但这条路是沿着他们留下的路标找到的。再次感谢两位作者。
@@ -295,9 +303,9 @@ Claude TAS 最后用了一种和他们很不一样的打法（尽早达标 + 精
 
 How a computer-made tool-assisted speedrun of Zuma Deluxe was planned and played
 
-| **9:38** | **11:22** | **−1:44** |
+| **8:51** | **11:22** | **−2:30** |
 |---|---|---|
-| Claude TAS total (TOTAL TIME on the final screen) | Previous world-record TAS ([QuocQuoc](https://www.youtube.com/@quocquoc444) & [DadoYep](https://www.youtube.com/@DadoYep), [video](#e10)) | about 15% faster |
+| Claude TAS total (TOTAL TIME on the final screen) | Previous world-record TAS ([QuocQuoc](https://www.youtube.com/@quocquoc444) & [DadoYep](https://www.youtube.com/@DadoYep), [video](#e10)) | about 22% faster |
 
 [1 What is this](#e1) · [2 Rules](#e2) · [3 Mechanics](#e3) · [4 Shooting](#e4) · [5 Scoring](#e5) · [6 Route planning](#e6) · [7 Decision tree & search](#e7) · [8 RNG & seed](#e8) · [9 Versions](#e9) · [10 vs the WR](#e10) · [11 Per-level times](#e11) · [12 How to watch](#e12) · [13 Implementation](#e13) · [14 Acknowledgements](#e14)
 
@@ -423,7 +431,11 @@ The original has a single stream of random numbers (a Mersenne Twister). New tra
 | v1 | 14:00 | Palindrome cascade planner + beam search, valued by “score so far + cascade potential − shots to clear”; best of 22 settings per level | Finishes the game, but the clean-up after the target is too slow |
 | v2 | — | v1 plus local re-optimisation | 3× slower and no better; abandoned |
 | v3 | 12:27 | Cross-level RNG manipulation (pick the solution that makes the next level easier) | Cross-level choice is valuable, but the stats (many gap bonuses, few combos) showed the play style itself was wrong |
-| <b>v4</b> | <b>9:38</b> | Exact all-angle aiming (with grazing gaps), interval-DP clean-up cost, colour-availability penalty, delayed firing to re-roll colours, value = estimated finishing frame, beam width 64 | The two biggest gains: colour control and a wider search |
+| v4 | 9:38 | Exact all-angle aiming (with grazing gaps), interval-DP clean-up cost, colour-availability penalty, delayed firing to re-roll colours, value = estimated finishing frame, beam width 64 | The two biggest gains: colour control and a wider search |
+| v4.1 | 9:11 | same searcher, re-run as four parallel full runs (beams 32/48/64/96, cross-level candidates up to 16; 112 workers on 128 cores), best of four kept | gains from wide search + cross-level RNG-path variance; the four runs converge to 551-553 s, width saturates around 64 |
+| v4.2 | 9:02 | value function re-tuned on the bench: clear-cost weight alpha 1.5 + candidate list K 20 (the cascade planner and post-target delay fishing were both refuted on the same bench), combos lead the ensemble, M=16 cross-level choice, best of three parallel runs | re-weighing beats new machinery: shape the chain for the endgame while still scoring; three runs land at 548.8 / 542.1 / 542.7 s |
+| v4.3 | 8:53 | knob combinations stack: alpha 1.5 + K 20 + settle 90 + colorPen 2 (−449 bench ticks total) lead the ensemble; M=16; seeds re-scanned on a full-76-level criterion | combinations stack (unlike mu vs alpha, which cancel); 16 seeds spread 25 s at equal compute — seed choice is its own lever |
+| <b>v4.4</b> | <b>8:51</b> | seed re-scan finished on the full-76-level criterion (32 quick scans + full-power verification of the leaders); seed 24 wins | quick-scan rank and full-power results do not fully agree (seeds 4 and 23 did not hold up), but re-picking the seed still nets 1.2 s; picking by 1-1 speed alone really did cost time |
 
 ### Ideas that did not help
 
@@ -449,9 +461,13 @@ The original has a single stream of random numbers (a Mersenne Twister). New tra
 |---|---|---|---|---|---|---|
 | World-record TAS | 11:22 | 685 | 52 | 61 | 25 | 10 |
 | Claude v3 | 12:27 | 459 | 25 | 478 | 21 | 5 |
-| <b>Claude v4</b> | <b>9:38</b> | 565 | 18 | 538 | 15 | 6 |
+| Claude v4 | 9:38 | 565 | 18 | 538 | 15 | 6 |
+| Claude v4.1 | 9:11 | 517 | 11 | 520 | 14 | 7 |
+| Claude v4.2 | 9:02 | 494 | 20 | 521 | 14 | 5 |
+| Claude v4.3 | 8:53 | 519 | 9 | 479 | 16 | 7 |
+| <b>Claude v4.4</b> | <b>8:51</b> | 501 | 8 | 508 | 15 | 5 |
 
-The two TAS runs play very differently. The human TAS builds huge 8–10 layer cascades that eat a whole chain at once. Claude's longest cascade is only 6 layers and it collects fewer coins, but it <b>reaches the target after 4.6 s on average</b> and then clears the rest quickly with precise colour control. Comparing all 76 levels one by one, Claude is faster on 56, within the same second on 14, and slower on 6 (3-1, 8-7, 9-3, 10-5, 11-1, 12-3).
+The two TAS runs play very differently. The human TAS builds huge 8–10 layer cascades that eat a whole chain at once. Claude's longest cascade is only 5 layers and it collects fewer coins, but it <b>reaches the target after 4.5 s on average</b> and then clears the rest quickly with precise colour control. Comparing all 76 levels one by one, Claude is faster on 70, within the same second on 4, and slower on 2 (9-6, 12-6).
 
 > The WR's per-level times come from the stats screen shown after each level in its video. Like the original game, it shows whole seconds (rounded down). The data is in `tas/wr_times.js`, and Claude's times are rounded the same way when comparing.
 
@@ -461,83 +477,83 @@ The two TAS runs play very differently. The human TAS builds huge 8–10 layer c
 
 | Level | Map | Claude | World record | Result |
 |---|---|---|---|---|
-| 1-1 | Spiral of Doom | 4.42 | 0:06 | faster |
-| 1-2 | Osprey Talon | 3.60 | 0:05 | faster |
-| 1-3 | Riverbed Mosaic | 4.99 | 0:05 | faster |
-| 1-4 | Breath of Ehecatl | 7.21 | 0:07 | same second |
-| 1-5 | Dark Vortex | 7.33 | 0:08 | faster |
-| 2-1 | When Spirals Attack | 6.80 | 0:08 | faster |
-| 2-2 | Mud Slide | 6.13 | 0:06 | same second |
-| 2-3 | Rorschach | 5.43 | 0:07 | faster |
-| 2-4 | Mouth of Centeotl | 6.44 | 0:07 | faster |
-| 2-5 | Snake Pit | 7.66 | 0:07 | same second |
-| 3-1 | Landing Pad | 8.24 | 0:07 | slower |
-| 3-2 | Altar of Tlaloc | 6.75 | 0:10 | faster |
-| 3-3 | Codex of Mixtec | 6.94 | 0:08 | faster |
-| 3-4 | Shrine of Quetzalcoatl | 7.60 | 0:08 | faster |
-| 3-5 | Mirror Serpent | 8.85 | 0:09 | faster |
-| 4-1 | Spiral of Doom | 6.83 | 0:07 | faster |
-| 4-2 | Osprey Talon | 5.11 | 0:07 | faster |
-| 4-3 | Riverbed Mosaic | 6.81 | 0:08 | faster |
-| 4-4 | Breath of Ehecatl | 7.14 | 0:07 | same second |
-| 4-5 | Dark Vortex | 6.52 | 0:09 | faster |
-| 4-6 | Switchback | 6.11 | 0:09 | faster |
-| 5-1 | When Spirals Attack | 7.59 | 0:09 | faster |
-| 5-2 | Mud Slide | 5.74 | 0:09 | faster |
-| 5-3 | Rorschach | 6.43 | 0:09 | faster |
-| 5-4 | Mouth of Centeotl | 7.52 | 0:08 | faster |
-| 5-5 | Snake Pit | 6.40 | 0:10 | faster |
-| 5-6 | Sand Garden | 7.57 | 0:10 | faster |
-| 6-1 | Landing Pad | 8.75 | 0:08 | same second |
-| 6-2 | Altar of Tlaloc | 8.22 | 0:09 | faster |
-| 6-3 | Codex of Mixtec | 9.49 | 0:10 | faster |
-| 6-4 | Shrine of Quetzalcoatl | 6.09 | 0:09 | faster |
-| 6-5 | Mirror Serpent | 9.13 | 0:10 | faster |
-| 6-6 | Sun Stone | 7.08 | 0:09 | faster |
-| 7-1 | Spiral of Doom | 5.61 | 0:07 | faster |
-| 7-2 | Osprey Talon | 6.08 | 0:08 | faster |
-| 7-3 | Riverbed Mosaic | 5.77 | 0:07 | faster |
-| 7-4 | Breath of Ehecatl | 6.74 | 0:08 | faster |
-| 7-5 | Dark Vortex | 9.06 | 0:09 | same second |
-| 7-6 | Switchback | 7.60 | 0:07 | same second |
-| 7-7 | Long Range | 7.18 | 0:09 | faster |
-| 8-1 | When Spirals Attack | 6.99 | 0:07 | faster |
-| 8-2 | Mud Slide | 7.08 | 0:08 | faster |
-| 8-3 | Rorschach | 6.99 | 0:08 | faster |
-| 8-4 | Mouth of Centeotl | 9.16 | 0:09 | same second |
-| 8-5 | Snake Pit | 6.02 | 0:10 | faster |
-| 8-6 | Sand Garden | 8.65 | 0:09 | faster |
-| 8-7 | Lair of the Mud Snake | 10.12 | 0:07 | slower |
-| 9-1 | Landing Pad | 7.02 | 0:09 | faster |
-| 9-2 | Altar of Tlaloc | 8.89 | 0:08 | same second |
-| 9-3 | Codex of Mixtec | 10.51 | 0:08 | slower |
-| 9-4 | Shrine of Quetzalcoatl | 7.01 | 0:10 | faster |
-| 9-5 | Mirror Serpent | 10.63 | 0:10 | same second |
-| 9-6 | Sun Stone | 8.37 | 0:08 | same second |
-| 9-7 | Zumaic Exodus | 7.54 | 0:09 | faster |
-| 10-1 | Spiral of Doom | 8.73 | 0:09 | faster |
-| 10-2 | Osprey Talon | 6.34 | 0:08 | faster |
-| 10-3 | Riverbed Mosaic | 7.33 | 0:09 | faster |
-| 10-4 | Breath of Ehecatl | 6.66 | 0:09 | faster |
-| 10-5 | Dark Vortex | 12.28 | 0:10 | slower |
-| 10-6 | Switchback | 6.94 | 0:09 | faster |
-| 10-7 | Long Range | 8.19 | 0:09 | faster |
-| 11-1 | When Spirals Attack | 10.47 | 0:09 | slower |
-| 11-2 | Mud Slide | 9.06 | 0:10 | faster |
-| 11-3 | Rorschach | 6.93 | 0:09 | faster |
-| 11-4 | Mouth of Centeotl | 7.79 | 0:08 | faster |
-| 11-5 | Snake Pit | 8.45 | 0:11 | faster |
-| 11-6 | Sand Garden | 8.34 | 0:10 | faster |
-| 11-7 | Lair of the Mud Snake | 8.41 | 0:09 | faster |
-| 12-1 | Landing Pad | 9.88 | 0:09 | same second |
-| 12-2 | Altar of Tlaloc | 9.89 | 0:09 | same second |
-| 12-3 | Codex of Mixtec | 9.33 | 0:08 | slower |
-| 12-4 | Shrine of Quetzalcoatl | 8.87 | 0:10 | faster |
-| 12-5 | Mirror Serpent | 9.41 | 0:10 | faster |
-| 12-6 | Sun Stone | 8.35 | 0:08 | same second |
-| 12-7 | Zumaic Exodus | 5.80 | 0:10 | faster |
-| 13-1 | space | 10.87 | 0:15 | faster |
-| **Total** | | **9:38.26** | **11:22** | |
+| 1-1 | Spiral of Doom | 5.11 | 0:06 | faster |
+| 1-2 | Osprey Talon | 4.24 | 0:05 | faster |
+| 1-3 | Riverbed Mosaic | 3.65 | 0:05 | faster |
+| 1-4 | Breath of Ehecatl | 5.66 | 0:07 | faster |
+| 1-5 | Dark Vortex | 7.50 | 0:08 | faster |
+| 2-1 | When Spirals Attack | 6.32 | 0:08 | faster |
+| 2-2 | Mud Slide | 4.75 | 0:06 | faster |
+| 2-3 | Rorschach | 5.32 | 0:07 | faster |
+| 2-4 | Mouth of Centeotl | 4.61 | 0:07 | faster |
+| 2-5 | Snake Pit | 6.55 | 0:07 | faster |
+| 3-1 | Landing Pad | 6.30 | 0:07 | faster |
+| 3-2 | Altar of Tlaloc | 7.36 | 0:10 | faster |
+| 3-3 | Codex of Mixtec | 7.31 | 0:08 | faster |
+| 3-4 | Shrine of Quetzalcoatl | 5.99 | 0:08 | faster |
+| 3-5 | Mirror Serpent | 6.86 | 0:09 | faster |
+| 4-1 | Spiral of Doom | 6.35 | 0:07 | faster |
+| 4-2 | Osprey Talon | 4.99 | 0:07 | faster |
+| 4-3 | Riverbed Mosaic | 6.32 | 0:08 | faster |
+| 4-4 | Breath of Ehecatl | 6.72 | 0:07 | faster |
+| 4-5 | Dark Vortex | 7.39 | 0:09 | faster |
+| 4-6 | Switchback | 6.45 | 0:09 | faster |
+| 5-1 | When Spirals Attack | 5.98 | 0:09 | faster |
+| 5-2 | Mud Slide | 5.92 | 0:09 | faster |
+| 5-3 | Rorschach | 7.71 | 0:09 | faster |
+| 5-4 | Mouth of Centeotl | 5.47 | 0:08 | faster |
+| 5-5 | Snake Pit | 7.13 | 0:10 | faster |
+| 5-6 | Sand Garden | 6.90 | 0:10 | faster |
+| 6-1 | Landing Pad | 5.92 | 0:08 | faster |
+| 6-2 | Altar of Tlaloc | 5.95 | 0:09 | faster |
+| 6-3 | Codex of Mixtec | 8.51 | 0:10 | faster |
+| 6-4 | Shrine of Quetzalcoatl | 7.17 | 0:09 | faster |
+| 6-5 | Mirror Serpent | 7.13 | 0:10 | faster |
+| 6-6 | Sun Stone | 7.25 | 0:09 | faster |
+| 7-1 | Spiral of Doom | 6.37 | 0:07 | faster |
+| 7-2 | Osprey Talon | 6.52 | 0:08 | faster |
+| 7-3 | Riverbed Mosaic | 6.15 | 0:07 | faster |
+| 7-4 | Breath of Ehecatl | 6.81 | 0:08 | faster |
+| 7-5 | Dark Vortex | 7.08 | 0:09 | faster |
+| 7-6 | Switchback | 6.86 | 0:07 | faster |
+| 7-7 | Long Range | 5.33 | 0:09 | faster |
+| 8-1 | When Spirals Attack | 7.00 | 0:07 | same second |
+| 8-2 | Mud Slide | 5.23 | 0:08 | faster |
+| 8-3 | Rorschach | 6.73 | 0:08 | faster |
+| 8-4 | Mouth of Centeotl | 7.86 | 0:09 | faster |
+| 8-5 | Snake Pit | 6.89 | 0:10 | faster |
+| 8-6 | Sand Garden | 7.85 | 0:09 | faster |
+| 8-7 | Lair of the Mud Snake | 7.97 | 0:07 | same second |
+| 9-1 | Landing Pad | 6.71 | 0:09 | faster |
+| 9-2 | Altar of Tlaloc | 7.44 | 0:08 | faster |
+| 9-3 | Codex of Mixtec | 7.11 | 0:08 | faster |
+| 9-4 | Shrine of Quetzalcoatl | 9.47 | 0:10 | faster |
+| 9-5 | Mirror Serpent | 8.93 | 0:10 | faster |
+| 9-6 | Sun Stone | 9.89 | 0:08 | slower |
+| 9-7 | Zumaic Exodus | 7.75 | 0:09 | faster |
+| 10-1 | Spiral of Doom | 7.39 | 0:09 | faster |
+| 10-2 | Osprey Talon | 7.18 | 0:08 | faster |
+| 10-3 | Riverbed Mosaic | 6.02 | 0:09 | faster |
+| 10-4 | Breath of Ehecatl | 9.73 | 0:09 | same second |
+| 10-5 | Dark Vortex | 8.53 | 0:10 | faster |
+| 10-6 | Switchback | 7.91 | 0:09 | faster |
+| 10-7 | Long Range | 8.06 | 0:09 | faster |
+| 11-1 | When Spirals Attack | 6.79 | 0:09 | faster |
+| 11-2 | Mud Slide | 7.52 | 0:10 | faster |
+| 11-3 | Rorschach | 8.49 | 0:09 | faster |
+| 11-4 | Mouth of Centeotl | 7.17 | 0:08 | faster |
+| 11-5 | Snake Pit | 6.69 | 0:11 | faster |
+| 11-6 | Sand Garden | 8.16 | 0:10 | faster |
+| 11-7 | Lair of the Mud Snake | 7.48 | 0:09 | faster |
+| 12-1 | Landing Pad | 8.50 | 0:09 | faster |
+| 12-2 | Altar of Tlaloc | 7.87 | 0:09 | faster |
+| 12-3 | Codex of Mixtec | 8.22 | 0:08 | same second |
+| 12-4 | Shrine of Quetzalcoatl | 8.12 | 0:10 | faster |
+| 12-5 | Mirror Serpent | 8.65 | 0:10 | faster |
+| 12-6 | Sun Stone | 10.26 | 0:08 | slower |
+| 12-7 | Zumaic Exodus | 5.92 | 0:10 | faster |
+| 13-1 | space | 8.55 | 0:15 | faster |
+| **Total** | | **8:51.95** | **11:22** | |
 
 <a name="e12"></a>
 
@@ -565,7 +581,7 @@ Special thanks to <b>QuocQuoc</b> ([YouTube](https://www.youtube.com/@quocquoc44
 2. <b>The stats screen tells a story.</b> Their final stats were 685 combos and 61 gaps; our v3 had 459 combos and 478 gaps. We were chasing gap-bonus points instead of clearing balls efficiently. That comparison is what triggered the v4 rewrite.
 3. <b>The CHAIN bonus is worth nursing.</b> They reached a chain of 25 shots in a row that all cleared balls. The bonus is 10n+50 points per shot and keeps growing, so the TAS tries to make every shot count and only throws a ball away when it has to.
 4. <b>Coins are not decoration.</b> They collected 52 coins. In late levels one coin is 16% of the target score, so hitting the coin became one of the candidate moves at every step.
-5. <b>Huge cascades can be built on purpose.</b> They arrange the chain into 8–10 layer cascades that eat an entire chain at once, which proves that fixing colours while a cascade is running is possible at the original firing rate. Our longest cascade is still only 6 layers. This is where Claude TAS still trails the human TAS, and the most promising thing left to learn from them.
+5. <b>Huge cascades can be built on purpose.</b> They arrange the chain into 8–10 layer cascades that eat an entire chain at once, which proves that fixing colours while a cascade is running is possible at the original firing rate. Our longest cascade is still only 5 layers. This is where Claude TAS still trails the human TAS, and the most promising thing left to learn from them.
 6. <b>A reliable ruler.</b> The stats screen after each of their levels gave us a per-level time to compare against, so we could find our slowest levels and work on those first. We even learnt from their video how to read a level's start and end: the progress bar turning from green to yellow marks the start, and the level ends 0.2 s before the bonus explosions appear.
 
 Claude TAS ended up beating the record with a very different style (reach the target early, then precise colour control), but it found that path by following the signposts they left. Thanks again to both of them.

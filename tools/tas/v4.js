@@ -491,7 +491,7 @@ function shotsForScore(D, n0, mu) {
   return 200;
 }
 
-const DEF4 = { coarse: 1, pushOut: 0, drift: 20, layerT: 0, colorPen: 1, maxDelay: 0, delayTop: 3, planShots: 0, topPlans: 6, rho: 300, planScoreW: 0.7, alpha: 1.0, mu: 40, kappa: 0.6, omega: 0.25, tail: 50, width: 24, K: 14, settle: 60, maxDepth: 120, maxTicks: 3500, noise: 0, seed: 1, step: 1 };
+const DEF4 = { coarse: 1, pushOut: 0, drift: 20, layerT: 0, colorPen: 1, maxDelay: 0, delayTop: 3, postDelay: 0, postTop: 6, planShots: 0, topPlans: 6, rho: 300, planScoreW: 0.7, alpha: 1.0, mu: 40, kappa: 0.6, omega: 0.25, tail: 50, width: 24, K: 14, settle: 60, maxDepth: 120, maxTicks: 3500, noise: 0, seed: 1, step: 1 };
 
 // estimated level end tick for a state at tick ts, given the per-curve clear costs
 function finishEst(b, ts, cost, P, n0) {
@@ -713,10 +713,17 @@ function beam4(startGame, opts) {
       for (const c of candidates(node.game, P, rng, base)) { const ch = makeChild(node, c, 0); if (ch) kids.push(ch); }
       if (P.maxDelay) {
         kids.sort((a, c) => a.F - c.F);
+        // post-target colour fishing: once the score target is reached a wider delay
+        // window is pure gain whenever the saved shot outweighs the waited frames
+        // (the value function prices the wait via mStateCount), so try more delays
+        // on more kids there.
+        const post = P.postDelay && node.game.board.mHaveReachedTarget;
+        const md = post ? P.postDelay : P.maxDelay;
+        const dt = post ? Math.max(P.delayTop, P.postTop) : P.delayTop;
         const extra = [];
-        for (const k of kids.slice(0, P.delayTop)) {
-          if ((!(k.cpen > 0) && !P.delayAll) || k.c.wait) continue;
-          for (let d = 1; d <= P.maxDelay; d++) { const ch = makeChild(node, k.c, d); if (ch) extra.push(ch); }
+        for (const k of kids.slice(0, dt)) {
+          if ((!(k.cpen > 0) && !P.delayAll && !post) || k.c.wait) continue;
+          for (let d = 1; d <= md; d++) { const ch = makeChild(node, k.c, d); if (ch) extra.push(ch); }
         }
         for (const x of extra) kids.push(x);
       }
