@@ -126,7 +126,7 @@ function save(P) {
   const playTot = P.levels.reduce((a, L) => a + L.playTicks, 0);
   const movie = { seed: P.seed, events: P.events, levels: P.levels, totalPlayTicks: playTot,
     totalRtaTicks: (P.finalTick || P.upto) + P.reveals * 196, inputCount: P.events.length,
-    note: 'Claude TAS v5 · v4 search ensemble + full-power cross-level lookahead (quick filter M -> F, whole ensemble on the next level, results carried over)' };
+    note: 'Claude TAS v5 · 最后一发推迟变体（操控下一关随机数） · 跨关完整前瞻（快速筛选 → 全部 32 套设置） · v4 集束搜索 束宽64' };
   fs.writeFileSync(path.join(OUT, 'movie' + TAG + '.js'), 'window.TAS_MOVIE = ' + JSON.stringify(movie) + ';\n');
 }
 
