@@ -1,4 +1,4 @@
-# ZumaTAS: a faithful Zuma Deluxe replica + Claude TAS (8:51)
+# ZumaTAS: a faithful Zuma Deluxe replica + Claude TAS (8:12)
 
 [English](#english) · [中文](#中文) · Full write-up: [docs/TAS.md](docs/TAS.md) (also in-game as `docs/tas_doc.html`)
 
@@ -10,9 +10,10 @@
 | Claude TAS v4.1 (`tas/movie_r64.js`) | 9:11 (551.00 s) | 517 | 11 | 520 | 14 | 7 |
 | Claude TAS v4.2 (`tas/movie_v5b.js`) | 9:02 (542.07 s) | 494 | 20 | 521 | 14 | 5 |
 | Claude TAS v4.3 (`tas/movie_v7.js`) | 8:53 (533.15 s) | 519 | 9 | 479 | 16 | 7 |
-| **Claude TAS v4.4** (`tas/movie.js`) | **8:51** (531.95 s) | 501 | 8 | 508 | 15 | 5 |
+| Claude TAS v4.4 (`tas/movie_f24.js`) | 8:51 (531.95 s) | 501 | 8 | 508 | 15 | 5 |
+| **Claude TAS v5** (`tas/movie.js`) | **8:12** (492.12 s) | 501 | 6 | 489 | 14 | 6 |
 
-TOTAL TIME is the sum of in-level times shown on the game's WINNING TOTALS screen. v4.1 re-ran the unmodified v4 searcher as four independent full 76-level runs in parallel and kept the best. v4.2 re-tuned the value function on the 22-level bench (`alpha` 1.5 + `K` 20). v4.3 found the knob combinations **stack**: `alpha` 1.5 + `K` 20 + `settle` 90 + `colorPen` 2 is worth −449 bench ticks. v4.4 re-scanned the seed on a full-76-level criterion (the original seed 64 was picked by 1-1 speed alone): 32 quick full runs spread 25 s at equal compute, and the best of the verified seeds (24) lands at 531.95 s. Level by level the current movie is faster than the world record on 70 of 76 levels, in the same second on 4 and slower on 2 (9-6, 12-6).
+TOTAL TIME is the sum of in-level times shown on the game's WINNING TOTALS screen. v4.1 re-ran the unmodified v4 searcher as four independent full 76-level runs in parallel and kept the best. v4.2 re-tuned the value function on the 22-level bench (`alpha` 1.5 + `K` 20). v4.3 found the knob combinations **stack**: `alpha` 1.5 + `K` 20 + `settle` 90 + `colorPen` 2 is worth −449 bench ticks. v4.4 re-scanned the seed on a full-76-level criterion (the original seed 64 was picked by 1-1 speed alone): 32 quick full runs spread 25 s at equal compute, and the best of the verified seeds (24) lands at 531.95 s. v5 rewrites the cross-level choice (`tools/tas/run_v5.js`, in-level searcher unchanged): a level's final shot is also tried 1–20 frames later, re-aimed at the same slot. The level often ends at the same tick anyway, but the next level starts from different random numbers. These variants join the candidates, and the best 4 by a quick trial each get the whole ensemble on the next level. One full run lands at 492.12 s (−39.8 s, of which −34.7 s in the clean-up after the target). Level by level the current movie is faster than the world record on 74 of 76 levels, in the same second on 1 and slower on 1 (8-7).
 
 ---
 
@@ -36,7 +37,7 @@ TOTAL TIME is the sum of in-level times shown on the game's WINNING TOTALS scree
 # 1. build the assets from your installation (writes assets/ and js/gamedata.js)
 python tools/build_assets.py --game "C:/Program Files (x86)/Steam/steamapps/common/Zuma Deluxe" --openmpt path/to/openmpt123 --ffmpeg path/to/ffmpeg
 
-# 2. check that your game data matches the recording (should print TOTAL TIME 8:51)
+# 2. check that your game data matches the recording (should print TOTAL TIME 8:12)
 node tools/tas/final_stats.js tas/movie.js
 
 # 3. serve the folder and open http://localhost:8767
@@ -53,16 +54,42 @@ The build script prints SHA-256 checksums of `levels/levels.xml` and `properties
 
 ### Reproducing the TAS
 
+The published 8:12 movie (v5) is one full run of `run_v5.js` on seed 24:
+
+```bash
+# usage: run_v5.js <seed> <workers> <M> <tag> <width> <quickWidth> <F> <ensemble>
+#   FD = final-shot delay range in ticks, FDC = how many top candidates get delay variants
+FD=20 FDC=6 node --max-old-space-size=8000 tools/tas/run_v5.js 24 128 16 _v10 64 8 4 32   # -> 492.12 s (published)
+```
+
+This writes `tas/progress_24_v10.json` and `tas/movie_v10.js`; copy the movie to `tas/movie.js` to watch it. The run is resumable: run the same command again to continue. It took about 3 h with 128 worker processes on a 128-core box. With fewer cores it still works, only slower, because every level waits for 4 × 32 full searches.
+
+v5 keeps the v4 searcher and ensemble but rewrites the cross-level choice:
+- The top 16 distinct solutions of a level, plus final-shot-delay variants of the top 6 (de-duplicated by the next level's random state), each get a quick trial of the next level.
+- The best 4 then each get the whole 32-setting ensemble on the next level, and the pick is min(this level + best next level).
+- The chosen candidate's search is carried over as the next level's ensemble.
+
+Two more runs on the same seed are kept as records:
+
+```bash
+node tools/tas/run_v5.js 24 128 16 _v9 64 8 4 32                                          # lookahead only, no variants: level with 8:51 at 50 levels, stopped
+FD=24 FDC=8 VMAX=100 node --max-old-space-size=12000 tools/tas/run_v5.js 24 128 16 _v11 64 8 4 32   # wider variant pool -> 499.92 s
+```
+
+A single full run is noisy. Full runs with the v4.3/v4.4 search settings (seeds 4, 15, 23, 24, 51 and 64) landed between 531.95 and 550.46 s, and v11, which only widens the variant pool, came out 7.8 s slower than v10. Compare settings on paired per-level results, not on one run each.
+
+#### Earlier versions (v4 to v4.4)
+
 ```bash
 node tools/tas/run_v4.js 64 22 4 _v4 64 8   # seed 64, 22 worker processes, compare 4 solutions, beam width 64, lookahead width 8
 ```
 
-This writes `tas/progress_64_v4.json` (resumable) and `tas/movie_v4.js`; copy it to `tas/movie.js` to watch it. The v4 run took about 4 hours on 22 CPU cores. Older pipelines: `run_v3.js` (12:27) and `run_all.js` (v1, 14:00).
+This writes `tas/progress_64_v4.json` (resumable) and `tas/movie_v4.js`. The v4 run (9:38) took about 4 hours on 22 CPU cores. Older pipelines: `run_v3.js` (12:27) and `run_all.js` (v1, 14:00).
 
-The published 9:11 movie was made by re-running the same driver as **four independent full runs in parallel** (on a 128-core machine, ~3.5 h wall) and keeping the best — search code unchanged, only compute and fresh cross-level RNG paths:
+The 9:11 movie (v4.1) was made by re-running the same driver as **four independent full runs in parallel** (on a 128-core machine, ~3.5 h wall) and keeping the best — search code unchanged, only compute and fresh cross-level RNG paths:
 
 ```bash
-node tools/tas/run_v4.js 64 32 8  _r64 64 8   # beam 64  -> 551.00 s (published)
+node tools/tas/run_v4.js 64 32 8  _r64 64 8   # beam 64  -> 551.00 s (v4.1 movie)
 node tools/tas/run_v4.js 64 32 8  _r48 48 8   # beam 48  -> 551.50 s
 node tools/tas/run_v4.js 64 24 8  _r96 96 8   # beam 96  -> 553.03 s (width saturates ~64)
 node tools/tas/run_v4.js 64 24 16 _r16 32 16  # M=16 deep cross-level choice -> 551.13 s
@@ -70,30 +97,30 @@ node tools/tas/run_v4.js 64 24 16 _r16 32 16  # M=16 deep cross-level choice -> 
 
 The four `tas/movie_r*.js` files are kept as experiment records.
 
-v4.2 re-tunes the searcher on the same bench (`tools/tas/bench4.js` on the 22-level test set, ~90 s per config on a many-core box): clear-cost weight `alpha` 1.5 + candidate list `K` 20 was the winning combination (−246 ticks vs base, bit-identical across bench seeds), and those combos now lead the `VAR` ensemble in `run_v4.js`. Three parallel full runs with the retuned ensemble:
+v4.2 re-tunes the searcher on the same bench (`tools/tas/bench4.js` on the 22-level test set, ~90 s per config on a many-core box): clear-cost weight `alpha` 1.5 + candidate list `K` 20 was the winning combination (−246 ticks vs base; with noise 0 the bench is deterministic, so this is one sample per config), and those combos now lead the `VAR` ensemble in `run_v4.js`. Three parallel full runs with the retuned ensemble:
 
 ```bash
-node tools/tas/run_v4.js 64 32 16 _v5b 64 8   # M=16 deep cross-level choice -> 542.07 s (published)
+node tools/tas/run_v4.js 64 32 16 _v5b 64 8   # M=16 deep cross-level choice -> 542.07 s (v4.2 movie)
 node tools/tas/run_v4.js 64 32 8  _v5  64 8   # M=8                            -> 548.77 s
 node tools/tas/run_v4.js 64 40 8  _v6  64 8   # combo-heavy ensemble           -> 542.74 s
 ```
 
-`v4.js` also gained an optional `postDelay`/`postTop` knob (wider delayed firing after the score target is reached); it is off by default — it lost by ~1500 ticks on the bench, but it is kept as a configurable option.
+`v4.js` also gained an optional `postDelay`/`postTop` knob (wider delayed firing after the score target is reached); it is off by default. It lost by ~1500 ticks on the bench, and re-measured with the v4.3 settings it is +975 ticks paired per level (t = 3.2); it is kept as a configurable option.
 
 v4.3 found the combinations stack (`alpha` 1.5 + `K` 20 + `settle` 90 + `colorPen` 2: −449 bench ticks vs the original base) and now leads the `VAR` ensemble:
 
 ```bash
-node tools/tas/run_v4.js 64 32 16 _v7 64 8   # quad ensemble, M=16 -> 533.15 s (published)
+node tools/tas/run_v4.js 64 32 16 _v7 64 8   # quad ensemble, M=16 -> 533.15 s (v4.3 movie)
 node tools/tas/run_v4.js 64 32 24 _v7b 64 8  # M=24 -> 537.99 s (M=16 stays best)
 ```
 
 Seeds can be re-scanned with quick full runs (`node tools/tas/run_v4.js <seed> 4 2 _q<seed> 16 4`); 32 seeds spread 25 s at equal compute, so the choice of seed matters. The published movie uses seed 24, found by this criterion (the original pick, 64, was chosen by 1-1 speed alone):
 
 ```bash
-node tools/tas/run_v4.js 24 32 16 _f24 64 8   # seed 24, quad ensemble, M=16 -> 531.95 s (published)
+node tools/tas/run_v4.js 24 32 16 _f24 64 8   # seed 24, quad ensemble, M=16 -> 531.95 s (v4.4, 8:51)
 ```
 
-Useful tools in `tools/tas/`: `bench4.js` (benchmark a search setting on all level-start states), `final_stats.js` (WINNING TOTALS of a movie), `determinism.js` (headless vs visual check), `test_trace.js` (aim predictor vs exact simulation), `dpcheck.js` (clear-cost DP vs brute force).
+Useful tools in `tools/tas/`: `bench4.js` (benchmark a search setting on all level-start states), `final_stats.js` (WINNING TOTALS of a movie), `determinism.js` (headless vs visual check), `test_trace.js` (aim predictor vs exact simulation), `dpcheck.js` (clear-cost DP vs brute force), `delayprobe.js` (how much the next level changes when a level's final shot is delayed), `endprobe.js` (re-search a movie's levels from the target moment).
 
 ### Layout
 
@@ -102,14 +129,14 @@ Useful tools in `tools/tas/`: `bench4.js` (benchmark a search setting on all lev
 | `js/sim.js` | the game (pure, deterministic simulation) |
 | `js/render.js`, `js/font.js`, `js/app.js` | drawing, PopCap ImageFont port, screens/input/audio/replay viewer |
 | `tools/build_assets.py` | converts your Zuma Deluxe installation into `assets/` + `js/gamedata.js` |
-| `tools/tas/v4.js`, `run_v4.js` | the current TAS search and full-run driver |
+| `tools/tas/v4.js`, `run_v5.js` | the current TAS search and full-run driver (`run_v4.js`: the v4.x driver) |
 | `tas/movie.js` | the recorded run (inputs per 10 ms tick) |
 | `tas/wr_times.js` | world-record time for every level |
 | `docs/` | write-up (`TAS.md`, `tas_doc.html`) |
 
 ### Credits and legal
 
-Zuma Deluxe © PopCap Games / Electronic Arts; this is a non-commercial fan project, not affiliated with or endorsed by them. Game logic ported from [CircleShootApp](https://github.com/alula/CircleShootApp). Includes portions of the PopCap Games Framework, © 2005-2009 PopCap Games, Inc. Comparison times from the world-record TAS by QuocQuoc and DadoYep. Our own code is MIT licensed ([LICENSE](LICENSE)); see [NOTICE](NOTICE) for third-party notices.
+Zuma Deluxe © PopCap Games / Electronic Arts; this is a non-commercial fan project, not affiliated with or endorsed by them. Game logic ported from [CircleShootApp](https://github.com/alula/CircleShootApp). Includes portions of the PopCap Games Framework, © 2005-2009 PopCap Games, Inc. Comparison times from the world-record TAS by QuocQuoc and DadoYep. Original replica and TAS v1–v4 by [9933fa](https://github.com/9933fa); TAS v4.1–v5 (9:38 → 8:12) by [AdamPlatin123](https://github.com/AdamPlatin123). Our own code is MIT licensed ([LICENSE](LICENSE)); see [NOTICE](NOTICE) for third-party notices.
 
 ---
 
@@ -133,7 +160,7 @@ Zuma Deluxe © PopCap Games / Electronic Arts; this is a non-commercial fan proj
 # 1. 从你的游戏目录生成素材（写入 assets/ 和 js/gamedata.js）
 python tools/build_assets.py --game "C:/Program Files (x86)/Steam/steamapps/common/Zuma Deluxe" --openmpt openmpt123路径 --ffmpeg ffmpeg路径
 
-# 2. 检查游戏数据和录像是否一致（应输出 TOTAL TIME 8:51）
+# 2. 检查游戏数据和录像是否一致（应输出 TOTAL TIME 8:12）
 node tools/tas/final_stats.js tas/movie.js
 
 # 3. 启动本地服务器，浏览器打开 http://localhost:8767
@@ -150,16 +177,44 @@ python -m http.server 8767
 
 ### 复现 TAS
 
+正式的 8:12 录像（v5）是 `run_v5.js` 在种子 24 上跑的一整局：
+
+```bash
+# 用法：run_v5.js <种子> <进程数> <M> <标签> <束宽> <试探束宽> <F> <集成数>
+#   FD = 最后一发推迟范围（帧），FDC = 生成推迟变体的候选数
+FD=20 FDC=6 node --max-old-space-size=8000 tools/tas/run_v5.js 24 128 16 _v10 64 8 4 32   # -> 492.12 s（正式发布）
+```
+
+结果写入 `tas/progress_24_v10.json` 和 `tas/movie_v10.js`，把录像复制为 `tas/movie.js` 即可在游戏里观看。可以断点续跑：再执行一次同样的命令就会接着跑。在 128 核机器上用 128 个进程约 3 小时；核数少也能跑，只是更慢，因为每关都要等 4 × 32 个完整搜索。
+
+v5 的关内搜索器和集成都不变，重写的是跨关选择：
+- 本关最好的 16 个不同解，加上其中前 6 个“最后一发推迟 1~20 帧、重新瞄准同一落点”的变体，按下一关开局的随机数状态去重。很多关推迟最后一发并不增加本关用时，但下一关开局完全不同。
+- 每个候选先往下一关快速试打，前 4 名再各用全部 32 套设置完整搜下一关，选“本关 + 下一关”最快的。
+- 被选中那个的搜索结果直接沿用为下一关的集成。
+
+同一种子上另外两局保留作为实验记录：
+
+```bash
+node tools/tas/run_v5.js 24 128 16 _v9 64 8 4 32                                          # 只有完整前瞻、没有变体：50 关时与 8:51 持平，中途停止
+FD=24 FDC=8 VMAX=100 node --max-old-space-size=12000 tools/tas/run_v5.js 24 128 16 _v11 64 8 4 32   # 更宽的变体池 -> 499.92 s
+```
+
+8:51 → 8:12 的 39.8 秒里，有 34.7 秒来自达标后的清场。对世界纪录逐关：74 关更快、1 关同秒、1 关更慢（8-7）。
+
+单局全量的噪声很大：v4.3/v4.4 搜索设置下的全量（种子 4、15、23、24、51、64）落在 531.95 ~ 550.46 s 之间；v11 只放宽了变体池，就比 v10 慢了 7.8 秒。比较设置要看逐关配对结果，不要只看各跑一局。
+
+#### 早期版本（v4 ~ v4.4）
+
 ```bash
 node tools/tas/run_v4.js 64 22 4 _v4 64 8   # 种子 64、22 个进程、比较 4 个解、束宽 64、下一关试探束宽 8
 ```
 
-结果写入 `tas/progress_64_v4.json`（可断点续跑）和 `tas/movie_v4.js`，复制为 `tas/movie.js` 即可在游戏里观看。v4 在 22 个 CPU 核心上跑了约 4 小时。旧版流程：`run_v3.js`（12:27）、`run_all.js`（v1，14:00）。
+结果写入 `tas/progress_64_v4.json`（可断点续跑）和 `tas/movie_v4.js`。v4（9:38）在 22 个 CPU 核心上跑了约 4 小时。旧版流程：`run_v3.js`（12:27）、`run_all.js`（v1，14:00）。
 
-正式的 9:11 录像是把同一驱动**并行跑 4 路独立全程**（128 核机器，约 3.5 小时）取最优得到的——搜索代码零改动，只是算力加上重新洗牌的跨关随机路径：
+9:11 录像（v4.1）是把同一驱动**并行跑 4 路独立全程**（128 核机器，约 3.5 小时）取最优得到的——搜索代码零改动，只是算力加上重新洗牌的跨关随机路径：
 
 ```bash
-node tools/tas/run_v4.js 64 32 8  _r64 64 8   # 束宽 64  -> 551.00 s（正式发布）
+node tools/tas/run_v4.js 64 32 8  _r64 64 8   # 束宽 64  -> 551.00 s（v4.1 录像）
 node tools/tas/run_v4.js 64 32 8  _r48 48 8   # 束宽 48  -> 551.50 s
 node tools/tas/run_v4.js 64 24 8  _r96 96 8   # 束宽 96  -> 553.03 s（宽度收益在 64 附近饱和）
 node tools/tas/run_v4.js 64 24 16 _r16 32 16  # M=16 深跨关选择 -> 551.13 s
@@ -167,30 +222,30 @@ node tools/tas/run_v4.js 64 24 16 _r16 32 16  # M=16 深跨关选择 -> 551.13 s
 
 四份 `tas/movie_r*.js` 保留作为实验记录。
 
-v4.2 在同一测试台（`tools/tas/bench4.js`，22 关测试集，多核机器上每组约 90 秒）上重调了估值：清场代价权重 `alpha` 1.5 + 候选数 `K` 20 是最优组合（相对基线 −246 tick，且各 bench 种子下逐位一致），这些组合现在排在 `run_v4.js` 的 `VAR` 集成最前面。用重调后的集成并行跑了三路全量：
+v4.2 在同一测试台（`tools/tas/bench4.js`，22 关测试集，多核机器上每组约 90 秒）上重调了估值：清场代价权重 `alpha` 1.5 + 候选数 `K` 20 是最优组合（相对基线 −246 tick；noise 为 0 时测试台是确定性的，所以每组配置只有一个样本），这些组合现在排在 `run_v4.js` 的 `VAR` 集成最前面。用重调后的集成并行跑了三路全量：
 
 ```bash
-node tools/tas/run_v4.js 64 32 16 _v5b 64 8   # M=16 深跨关选择 -> 542.07 s（正式发布）
+node tools/tas/run_v4.js 64 32 16 _v5b 64 8   # M=16 深跨关选择 -> 542.07 s（v4.2 录像）
 node tools/tas/run_v4.js 64 32 8  _v5  64 8   # M=8             -> 548.77 s
 node tools/tas/run_v4.js 64 40 8  _v6  64 8   # 组合密集集成     -> 542.74 s
 ```
 
-`v4.js` 还新增了可选的 `postDelay`/`postTop` 旋钮（达标后更宽的延迟换色窗口）；默认关闭——测试集上它输了约 1500 tick，但保留为可配置项。
+`v4.js` 还新增了可选的 `postDelay`/`postTop` 旋钮（达标后更宽的延迟换色窗口）；默认关闭——测试集上它输了约 1500 tick，在 v4.3 设置下逐关配对复测为 +975 tick（t = 3.2），保留为可配置项。
 
 v4.3 发现旋钮组合可以叠加（`alpha` 1.5 + `K` 20 + `settle` 90 + `colorPen` 2：测试集累计 −449），现在排在 `VAR` 集成最前：
 
 ```bash
-node tools/tas/run_v4.js 64 32 16 _v7 64 8   # quad 集成, M=16 -> 533.15 s（正式发布）
+node tools/tas/run_v4.js 64 32 16 _v7 64 8   # quad 集成, M=16 -> 533.15 s（v4.3 录像）
 node tools/tas/run_v4.js 64 32 24 _v7b 64 8  # M=24 -> 537.99 s（M=16 仍是最优）
 ```
 
 种子也可以用快速全程重扫（`node tools/tas/run_v4.js <种子> 4 2 _q<种子> 16 4`）：32 个种子同算力下成绩差 25 秒，选种很重要。正式录像用的就是该口径选出的 24 号种（当年按 1-1 单关速度选的 64 号）：
 
 ```bash
-node tools/tas/run_v4.js 24 32 16 _f24 64 8   # 种子 24, quad 集成, M=16 -> 531.95 s（正式发布）
+node tools/tas/run_v4.js 24 32 16 _f24 64 8   # 种子 24, quad 集成, M=16 -> 531.95 s（v4.4，8:51）
 ```
 
-`tools/tas/` 里的常用工具：`bench4.js`（在全部关卡开局状态上测试搜索设置）、`final_stats.js`（输出录像的 WINNING TOTALS）、`determinism.js`（无画面/有画面一致性检查）、`test_trace.js`（瞄准预测与精确模拟对拍）、`dpcheck.js`（清场 DP 与暴力搜索对拍）。
+`tools/tas/` 里的常用工具：`bench4.js`（在全部关卡开局状态上测试搜索设置）、`final_stats.js`（输出录像的 WINNING TOTALS）、`determinism.js`（无画面/有画面一致性检查）、`test_trace.js`（瞄准预测与精确模拟对拍）、`dpcheck.js`（清场 DP 与暴力搜索对拍）、`delayprobe.js`（推迟本关最后一发对下一关的影响）、`endprobe.js`（从达标时刻重搜录像的各关）。
 
 ### 目录
 
@@ -199,11 +254,11 @@ node tools/tas/run_v4.js 24 32 16 _f24 64 8   # 种子 24, quad 集成, M=16 -> 
 | `js/sim.js` | 游戏本体（纯逻辑、确定性模拟） |
 | `js/render.js`、`js/font.js`、`js/app.js` | 绘制、PopCap ImageFont 移植、界面/输入/声音/回放 |
 | `tools/build_assets.py` | 把你的游戏目录转换成 `assets/` 和 `js/gamedata.js` |
-| `tools/tas/v4.js`、`run_v4.js` | 当前的 TAS 搜索与整局驱动 |
+| `tools/tas/v4.js`、`run_v5.js` | 当前的 TAS 搜索与整局驱动（`run_v4.js` 为 v4.x 的驱动） |
 | `tas/movie.js` | 录像（每 10 毫秒一帧的输入） |
 | `tas/wr_times.js` | 每关的世界纪录用时 |
 | `docs/` | 说明文档（`TAS.md`、`tas_doc.html`） |
 
 ### 致谢与版权
 
-Zuma Deluxe © PopCap Games / Electronic Arts；本项目为非商业的爱好者作品，与其没有关联、也未获其认可。游戏逻辑移植自 [CircleShootApp](https://github.com/alula/CircleShootApp)。包含 PopCap Games Framework 的部分内容，© 2005-2009 PopCap Games, Inc.。对比时间来自 QuocQuoc 与 DadoYep 的世界纪录 TAS。本项目自己的代码以 MIT 协议发布（[LICENSE](LICENSE)），第三方声明见 [NOTICE](NOTICE)。
+Zuma Deluxe © PopCap Games / Electronic Arts；本项目为非商业的爱好者作品，与其没有关联、也未获其认可。游戏逻辑移植自 [CircleShootApp](https://github.com/alula/CircleShootApp)。包含 PopCap Games Framework 的部分内容，© 2005-2009 PopCap Games, Inc.。对比时间来自 QuocQuoc 与 DadoYep 的世界纪录 TAS。原版复刻与 TAS v1–v4 由 [9933fa](https://github.com/9933fa) 完成；TAS v4.1–v5（9:38 → 8:12）由 [AdamPlatin123](https://github.com/AdamPlatin123) 完成。本项目自己的代码以 MIT 协议发布（[LICENSE](LICENSE)），第三方声明见 [NOTICE](NOTICE)。

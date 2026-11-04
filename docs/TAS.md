@@ -12,9 +12,9 @@
 
 一个电脑“工具辅助速通”是怎样想出来、怎样打出来的
 
-| **8:51** | **11:22** | **−2:30** |
+| **8:12** | **11:22** | **−3:10** |
 |---|---|---|
-| Claude TAS 总用时（通关画面 TOTAL TIME） | 此前世界纪录 TAS（[QuocQuoc](https://www.youtube.com/@quocquoc444) & [DadoYep](https://www.youtube.com/@DadoYep)，[视频](#z10)） | 快了约 22% |
+| Claude TAS 总用时（通关画面 TOTAL TIME） | 此前世界纪录 TAS（[QuocQuoc](https://www.youtube.com/@quocquoc444) & [DadoYep](https://www.youtube.com/@DadoYep)，[视频](#z10)） | 快了约 28% |
 
 [1 这是什么](#z1) · [2 规则](#z2) · [3 游戏机制](#z3) · [4 射击技巧](#z4) · [5 得分策略](#z5) · [6 路线规划](#z6) · [7 决策树与搜索](#z7) · [8 随机数与种子](#z8) · [9 版本迭代](#z9) · [10 与世界纪录对比](#z10) · [11 每关成绩](#z11) · [12 怎么观看](#z12) · [13 实现方式](#z13) · [14 致谢](#z14)
 
@@ -116,9 +116,9 @@ TAS 不背固定套路，每一关、每一种出球都重新计算。它在每�
 ```
 
 - 一关大约 30 发、40~50 层；每层 64 个局面 × 每个约 20 个分支，一次搜索要真实模拟约 6 万个局面。
-- 每关同时跑 <b>22 套不同设置</b>（颜色惩罚强弱、延迟范围、观察时长、随机扰动），取所有结果里最好的几个。
-- 再对最好的 <b>4 个不同解</b>，各自往下一关快速试打，选“本关 + 下一关”加起来最快的那个（见下一节）。
-- 整个 76 关用 22 个 CPU 核心跑了大约 4 小时，总共模拟了上亿个局面。
+- 每关同时跑 <b>32 套不同设置</b>（颜色惩罚强弱、延迟范围、观察时长、随机扰动），取所有结果里最好的几个。
+- v5 的跨关选择：取本关最好的 <b>16 个不同解</b>，再把其中前 6 个的<b>最后一发推迟 1~20 帧</b>（重新瞄准同一落点）得到一批变体，按“下一关开局的随机数状态”去重；每个候选先往下一关快速试打，挑出前 4 名，各用全部 32 套设置完整搜一遍下一关，选“本关 + 下一关”最快的。被选中候选的下一关结果直接留作下一关的集成，不浪费（见下一节）。
+- v5 一整局在 128 核上约 3 小时（每关 4 × 32 = 128 个完整搜索并行），总共模拟了约 8 亿个局面。
 
 <a name="z8"></a>
 
@@ -126,9 +126,10 @@ TAS 不背固定套路，每一关、每一种出球都重新计算。它在每�
 
 原版只有一条随机数流（Mersenne Twister），轨道上的新球、青蛙装的球、道具、金币、甚至爆炸的粒子特效都从这里取数：每爆一颗球就要消耗 240 个随机数。所以：
 
-- <b>种子</b>相当于开机时间。TAS 扫描了 100 个种子，选了 1-1 最快的 64 号。
+- <b>种子</b>相当于开机时间。TAS 起初扫描了 100 个种子，选了 1-1 最快的 64 号；v4.4 起改按全 76 关口径重扫，用 24 号。
 - <b>关内：</b>开火早一帧晚一帧、消球多一颗少一颗，后面所有颜色都会变。上面说的“晚 1~6 帧开火”就是主动利用这一点。
 - <b>跨关：</b>每一关开局时的随机数状态，取决于上一关是怎么打完的。于是“本关最快”的解不一定最好——它可能让下一关开局很差。TAS 会比较本关前 4 个解，各自往下一关试打，选两关合计最快的。这一招在 v3 时就比“逐关最快”快了 90 多秒。
+- <b>推迟最后一发（v5）：</b>达标以后，道具判定每一帧都还在消耗随机数，所以把本关最后一发推迟几帧，下一关的开局就完全不同；而很多关的结束时间是由最后一组球的消除动画决定的，推迟最后一发往往一帧都不多花。下一关不同开局之间能差 1 秒以上，所以 v5 把这些变体也当作候选，76 关里多数关最后选的都是变体。8:51 → 8:12 省下的 39.8 秒里，有 34.7 秒来自达标后的清场：TAS 学会了给下一关挑一个好清场的开局。
 - 种子本身的影响反而是次要的：同一关换不同随机设置多跑几次，好坏能差 10% 左右，但“打法本身更聪明”带来的提升更大。
 
 <a name="z9"></a>
@@ -144,7 +145,10 @@ TAS 不背固定套路，每一关、每一种出球都重新计算。它在每�
 | v4.1 | 9:11 | 搜索器不变，四路并行全量重跑（束宽 32/48/64/96、跨关候选至 16；128 核 112 进程），取四路最优 | 宽搜索与跨关随机路径方差的收益；四路收敛于 551~553 s，宽度收益约在 64 饱和 |
 | v4.2 | 9:02 | 测试集重调估值：清场代价权重 alpha 1.5 + 候选数 K 20（连锁规划器/达标后延迟换色均在同一测试集被证伪），组合进集成前置，M=16 深跨关选择，三路并行取最优 | 调权重比加机制值钱：一边攒分一边给清场整形；三路 548.8 / 542.1 / 542.7 s |
 | v4.3 | 8:53 | 发现旋钮组合可叠加：alpha 1.5 + K 20 + settle 90 + colorPen 2（测试集累计 −449），前置进集成；M=16；种子开始按全 76 关口径重扫 | 组合可以叠加（不像 mu 与 alpha 会互相抵消）；16 个种子同算力差 25 秒，选种是独立的大杠杆 |
-| <b>v4.4</b> | <b>8:51</b> | 种子按全 76 关口径重扫完成（32 种快扫 + 头部种子全功率验证），24 号种胜出 | 快扫排名与全功率结果不完全一致（种子 4/23 都未兑现），但重新选种仍净赚 1.2 秒；按 1-1 单关选种确实吃亏 |
+| v4.4 | 8:51 | 种子按全 76 关口径重扫完成（32 种快扫 + 头部种子全功率验证），24 号种胜出 | 快扫排名与全功率结果不完全一致（种子 4/23 都未兑现），但重新选种仍净赚 1.2 秒；按 1-1 单关选种确实吃亏 |
+| <b>v5</b> | <b>8:12</b> | 跨关选择重写：本关候选加入“最后一发推迟 1~20 帧”的变体（按下一关开局去重），快速试打筛出 4 个后各用全部 32 套设置完整搜下一关，被选中的结果直接留用；关内搜索器一行没改；128 核一路全量 | 只加完整前瞻、不加变体的版本与 8:51 持平；加上变体后 −39.8 秒，其中清场 −34.7 秒。下一关开局才是最大的杠杆，而推迟最后一发常常不花本关时间 |
+
+v1–v4 由 [9933fa](https://github.com/9933fa) 完成；v4.1–v5 由 [AdamPlatin123](https://github.com/AdamPlatin123) 完成。
 
 ### 试过但没用的想法
 
@@ -152,6 +156,11 @@ TAS 不背固定套路，每一关、每一种出球都重新计算。它在每�
 - 给“正在进行的连锁要持续多久”加时间下限：明显变差（会让 TAS 躲开连锁）。
 - 用神经网络学习估值（用自己的录像训练）：和手写估值打平。
 - 允许主动“等一等不开火”、对所有候选都试延迟：都变差。
+- 达标后在关内把延迟开火放宽到 12 帧：22 关测试集逐关配对 +975 帧（t=3.2），确实变差——延迟要放在跨关选择里用，不要放进关内的集束搜索。
+- 限制集束里每个父节点的子节点数（多样性上限）：与基线持平。
+- 只把跨关前瞻升级为完整搜索、不加推迟变体：与 8:51 持平。
+- 更宽的变体池（前 8 个候选、推迟到 24 帧、候选上限 116）：同种子再跑一局 8:19，没有比 8:12 更快（单局噪声约 ±6 秒）。
+- 在过场里多等几帧换随机数：过场的随机数消耗与时机无关，下一关开局完全不变。
 
 ### 一路上修掉的“理解错误”
 
@@ -174,9 +183,10 @@ TAS 不背固定套路，每一关、每一种出球都重新计算。它在每�
 | Claude v4.1 | 9:11 | 517 | 11 | 520 | 14 | 7 |
 | Claude v4.2 | 9:02 | 494 | 20 | 521 | 14 | 5 |
 | Claude v4.3 | 8:53 | 519 | 9 | 479 | 16 | 7 |
-| <b>Claude v4.4</b> | <b>8:51</b> | 501 | 8 | 508 | 15 | 5 |
+| Claude v4.4 | 8:51 | 501 | 8 | 508 | 15 | 5 |
+| <b>Claude v5</b> | <b>8:12</b> | 501 | 6 | 489 | 14 | 6 |
 
-两份 TAS 的风格完全不同。人类 TAS 擅长摆出 8~10 层的超长连锁，一次把整条链吃光；Claude TAS 的连锁最长只有 5 层、金币也拿得少，但它<b>平均 4.5 秒就达标</b>，然后用精确的颜色控制快速清场。全部 76 关逐关比较，Claude 更快 70 关、同一秒 4 关、更慢 2 关（9-6、12-6）。
+两份 TAS 的风格完全不同。人类 TAS 擅长摆出 8~10 层的超长连锁，一次把整条链吃光；Claude TAS 的连锁最长只有 6 层、金币也拿得少，但它<b>平均 4.4 秒就达标</b>，然后用精确的颜色控制快速清场。全部 76 关逐关比较，Claude 更快 74 关、同一秒 1 关、更慢 1 关（8-7）。
 
 > 世界纪录的每关时间取自录像里每关结束后的统计画面，按原版规则显示为整秒（向下取整），数据在 `tas/wr_times.js`。比较时把 Claude 的用时也按同样规则取整。
 
@@ -186,83 +196,83 @@ TAS 不背固定套路，每一关、每一种出球都重新计算。它在每�
 
 | 关卡 | 地图 | Claude | 世界纪录 | 比较 |
 |---|---|---|---|---|
-| 1-1 | Spiral of Doom | 5.11 | 0:06 | 更快 |
-| 1-2 | Osprey Talon | 4.24 | 0:05 | 更快 |
-| 1-3 | Riverbed Mosaic | 3.65 | 0:05 | 更快 |
-| 1-4 | Breath of Ehecatl | 5.66 | 0:07 | 更快 |
-| 1-5 | Dark Vortex | 7.50 | 0:08 | 更快 |
-| 2-1 | When Spirals Attack | 6.32 | 0:08 | 更快 |
-| 2-2 | Mud Slide | 4.75 | 0:06 | 更快 |
-| 2-3 | Rorschach | 5.32 | 0:07 | 更快 |
-| 2-4 | Mouth of Centeotl | 4.61 | 0:07 | 更快 |
-| 2-5 | Snake Pit | 6.55 | 0:07 | 更快 |
-| 3-1 | Landing Pad | 6.30 | 0:07 | 更快 |
-| 3-2 | Altar of Tlaloc | 7.36 | 0:10 | 更快 |
-| 3-3 | Codex of Mixtec | 7.31 | 0:08 | 更快 |
-| 3-4 | Shrine of Quetzalcoatl | 5.99 | 0:08 | 更快 |
-| 3-5 | Mirror Serpent | 6.86 | 0:09 | 更快 |
-| 4-1 | Spiral of Doom | 6.35 | 0:07 | 更快 |
-| 4-2 | Osprey Talon | 4.99 | 0:07 | 更快 |
-| 4-3 | Riverbed Mosaic | 6.32 | 0:08 | 更快 |
-| 4-4 | Breath of Ehecatl | 6.72 | 0:07 | 更快 |
-| 4-5 | Dark Vortex | 7.39 | 0:09 | 更快 |
-| 4-6 | Switchback | 6.45 | 0:09 | 更快 |
-| 5-1 | When Spirals Attack | 5.98 | 0:09 | 更快 |
-| 5-2 | Mud Slide | 5.92 | 0:09 | 更快 |
-| 5-3 | Rorschach | 7.71 | 0:09 | 更快 |
-| 5-4 | Mouth of Centeotl | 5.47 | 0:08 | 更快 |
-| 5-5 | Snake Pit | 7.13 | 0:10 | 更快 |
-| 5-6 | Sand Garden | 6.90 | 0:10 | 更快 |
-| 6-1 | Landing Pad | 5.92 | 0:08 | 更快 |
-| 6-2 | Altar of Tlaloc | 5.95 | 0:09 | 更快 |
-| 6-3 | Codex of Mixtec | 8.51 | 0:10 | 更快 |
-| 6-4 | Shrine of Quetzalcoatl | 7.17 | 0:09 | 更快 |
-| 6-5 | Mirror Serpent | 7.13 | 0:10 | 更快 |
-| 6-6 | Sun Stone | 7.25 | 0:09 | 更快 |
-| 7-1 | Spiral of Doom | 6.37 | 0:07 | 更快 |
-| 7-2 | Osprey Talon | 6.52 | 0:08 | 更快 |
-| 7-3 | Riverbed Mosaic | 6.15 | 0:07 | 更快 |
-| 7-4 | Breath of Ehecatl | 6.81 | 0:08 | 更快 |
-| 7-5 | Dark Vortex | 7.08 | 0:09 | 更快 |
-| 7-6 | Switchback | 6.86 | 0:07 | 更快 |
-| 7-7 | Long Range | 5.33 | 0:09 | 更快 |
-| 8-1 | When Spirals Attack | 7.00 | 0:07 | 同一秒 |
-| 8-2 | Mud Slide | 5.23 | 0:08 | 更快 |
-| 8-3 | Rorschach | 6.73 | 0:08 | 更快 |
-| 8-4 | Mouth of Centeotl | 7.86 | 0:09 | 更快 |
-| 8-5 | Snake Pit | 6.89 | 0:10 | 更快 |
-| 8-6 | Sand Garden | 7.85 | 0:09 | 更快 |
-| 8-7 | Lair of the Mud Snake | 7.97 | 0:07 | 同一秒 |
-| 9-1 | Landing Pad | 6.71 | 0:09 | 更快 |
-| 9-2 | Altar of Tlaloc | 7.44 | 0:08 | 更快 |
-| 9-3 | Codex of Mixtec | 7.11 | 0:08 | 更快 |
-| 9-4 | Shrine of Quetzalcoatl | 9.47 | 0:10 | 更快 |
-| 9-5 | Mirror Serpent | 8.93 | 0:10 | 更快 |
-| 9-6 | Sun Stone | 9.89 | 0:08 | 更慢 |
-| 9-7 | Zumaic Exodus | 7.75 | 0:09 | 更快 |
-| 10-1 | Spiral of Doom | 7.39 | 0:09 | 更快 |
-| 10-2 | Osprey Talon | 7.18 | 0:08 | 更快 |
-| 10-3 | Riverbed Mosaic | 6.02 | 0:09 | 更快 |
-| 10-4 | Breath of Ehecatl | 9.73 | 0:09 | 同一秒 |
-| 10-5 | Dark Vortex | 8.53 | 0:10 | 更快 |
-| 10-6 | Switchback | 7.91 | 0:09 | 更快 |
-| 10-7 | Long Range | 8.06 | 0:09 | 更快 |
-| 11-1 | When Spirals Attack | 6.79 | 0:09 | 更快 |
-| 11-2 | Mud Slide | 7.52 | 0:10 | 更快 |
-| 11-3 | Rorschach | 8.49 | 0:09 | 更快 |
-| 11-4 | Mouth of Centeotl | 7.17 | 0:08 | 更快 |
-| 11-5 | Snake Pit | 6.69 | 0:11 | 更快 |
-| 11-6 | Sand Garden | 8.16 | 0:10 | 更快 |
-| 11-7 | Lair of the Mud Snake | 7.48 | 0:09 | 更快 |
-| 12-1 | Landing Pad | 8.50 | 0:09 | 更快 |
-| 12-2 | Altar of Tlaloc | 7.87 | 0:09 | 更快 |
-| 12-3 | Codex of Mixtec | 8.22 | 0:08 | 同一秒 |
-| 12-4 | Shrine of Quetzalcoatl | 8.12 | 0:10 | 更快 |
-| 12-5 | Mirror Serpent | 8.65 | 0:10 | 更快 |
-| 12-6 | Sun Stone | 10.26 | 0:08 | 更慢 |
-| 12-7 | Zumaic Exodus | 5.92 | 0:10 | 更快 |
-| 13-1 | space | 8.55 | 0:15 | 更快 |
-| **合计** | | **8:51.95** | **11:22** | |
+| 1-1 | Spiral of Doom | 5.18 | 0:06 | 更快 |
+| 1-2 | Osprey Talon | 3.71 | 0:05 | 更快 |
+| 1-3 | Riverbed Mosaic | 3.70 | 0:05 | 更快 |
+| 1-4 | Breath of Ehecatl | 4.94 | 0:07 | 更快 |
+| 1-5 | Dark Vortex | 5.88 | 0:08 | 更快 |
+| 2-1 | When Spirals Attack | 5.69 | 0:08 | 更快 |
+| 2-2 | Mud Slide | 4.42 | 0:06 | 更快 |
+| 2-3 | Rorschach | 6.43 | 0:07 | 更快 |
+| 2-4 | Mouth of Centeotl | 5.99 | 0:07 | 更快 |
+| 2-5 | Snake Pit | 5.85 | 0:07 | 更快 |
+| 3-1 | Landing Pad | 6.24 | 0:07 | 更快 |
+| 3-2 | Altar of Tlaloc | 6.93 | 0:10 | 更快 |
+| 3-3 | Codex of Mixtec | 7.66 | 0:08 | 更快 |
+| 3-4 | Shrine of Quetzalcoatl | 5.55 | 0:08 | 更快 |
+| 3-5 | Mirror Serpent | 6.56 | 0:09 | 更快 |
+| 4-1 | Spiral of Doom | 5.64 | 0:07 | 更快 |
+| 4-2 | Osprey Talon | 4.29 | 0:07 | 更快 |
+| 4-3 | Riverbed Mosaic | 5.11 | 0:08 | 更快 |
+| 4-4 | Breath of Ehecatl | 6.69 | 0:07 | 更快 |
+| 4-5 | Dark Vortex | 6.75 | 0:09 | 更快 |
+| 4-6 | Switchback | 5.73 | 0:09 | 更快 |
+| 5-1 | When Spirals Attack | 6.40 | 0:09 | 更快 |
+| 5-2 | Mud Slide | 4.96 | 0:09 | 更快 |
+| 5-3 | Rorschach | 6.67 | 0:09 | 更快 |
+| 5-4 | Mouth of Centeotl | 6.27 | 0:08 | 更快 |
+| 5-5 | Snake Pit | 5.71 | 0:10 | 更快 |
+| 5-6 | Sand Garden | 6.95 | 0:10 | 更快 |
+| 6-1 | Landing Pad | 6.25 | 0:08 | 更快 |
+| 6-2 | Altar of Tlaloc | 6.53 | 0:09 | 更快 |
+| 6-3 | Codex of Mixtec | 5.76 | 0:10 | 更快 |
+| 6-4 | Shrine of Quetzalcoatl | 6.62 | 0:09 | 更快 |
+| 6-5 | Mirror Serpent | 7.87 | 0:10 | 更快 |
+| 6-6 | Sun Stone | 7.75 | 0:09 | 更快 |
+| 7-1 | Spiral of Doom | 5.35 | 0:07 | 更快 |
+| 7-2 | Osprey Talon | 4.46 | 0:08 | 更快 |
+| 7-3 | Riverbed Mosaic | 6.12 | 0:07 | 更快 |
+| 7-4 | Breath of Ehecatl | 6.05 | 0:08 | 更快 |
+| 7-5 | Dark Vortex | 7.69 | 0:09 | 更快 |
+| 7-6 | Switchback | 5.38 | 0:07 | 更快 |
+| 7-7 | Long Range | 6.94 | 0:09 | 更快 |
+| 8-1 | When Spirals Attack | 5.77 | 0:07 | 更快 |
+| 8-2 | Mud Slide | 6.04 | 0:08 | 更快 |
+| 8-3 | Rorschach | 6.84 | 0:08 | 更快 |
+| 8-4 | Mouth of Centeotl | 5.40 | 0:09 | 更快 |
+| 8-5 | Snake Pit | 7.40 | 0:10 | 更快 |
+| 8-6 | Sand Garden | 6.71 | 0:09 | 更快 |
+| 8-7 | Lair of the Mud Snake | 8.65 | 0:07 | 更慢 |
+| 9-1 | Landing Pad | 6.68 | 0:09 | 更快 |
+| 9-2 | Altar of Tlaloc | 6.99 | 0:08 | 更快 |
+| 9-3 | Codex of Mixtec | 6.91 | 0:08 | 更快 |
+| 9-4 | Shrine of Quetzalcoatl | 6.98 | 0:10 | 更快 |
+| 9-5 | Mirror Serpent | 8.89 | 0:10 | 更快 |
+| 9-6 | Sun Stone | 6.88 | 0:08 | 更快 |
+| 9-7 | Zumaic Exodus | 6.63 | 0:09 | 更快 |
+| 10-1 | Spiral of Doom | 6.22 | 0:09 | 更快 |
+| 10-2 | Osprey Talon | 5.17 | 0:08 | 更快 |
+| 10-3 | Riverbed Mosaic | 6.46 | 0:09 | 更快 |
+| 10-4 | Breath of Ehecatl | 6.40 | 0:09 | 更快 |
+| 10-5 | Dark Vortex | 10.52 | 0:10 | 同一秒 |
+| 10-6 | Switchback | 5.70 | 0:09 | 更快 |
+| 10-7 | Long Range | 7.42 | 0:09 | 更快 |
+| 11-1 | When Spirals Attack | 7.44 | 0:09 | 更快 |
+| 11-2 | Mud Slide | 6.26 | 0:10 | 更快 |
+| 11-3 | Rorschach | 6.60 | 0:09 | 更快 |
+| 11-4 | Mouth of Centeotl | 6.80 | 0:08 | 更快 |
+| 11-5 | Snake Pit | 7.51 | 0:11 | 更快 |
+| 11-6 | Sand Garden | 8.01 | 0:10 | 更快 |
+| 11-7 | Lair of the Mud Snake | 7.31 | 0:09 | 更快 |
+| 12-1 | Landing Pad | 7.03 | 0:09 | 更快 |
+| 12-2 | Altar of Tlaloc | 6.67 | 0:09 | 更快 |
+| 12-3 | Codex of Mixtec | 7.37 | 0:08 | 更快 |
+| 12-4 | Shrine of Quetzalcoatl | 7.92 | 0:10 | 更快 |
+| 12-5 | Mirror Serpent | 8.09 | 0:10 | 更快 |
+| 12-6 | Sun Stone | 7.44 | 0:08 | 更快 |
+| 12-7 | Zumaic Exodus | 6.41 | 0:10 | 更快 |
+| 13-1 | space | 7.93 | 0:15 | 更快 |
+| **合计** | | **8:12.12** | **11:22** | |
 
 <a name="z12"></a>
 
@@ -278,7 +288,7 @@ TAS 不背固定套路，每一关、每一种出球都重新计算。它在每�
 
 - <b>复刻：</b>依据 CircleShootApp 反编译源码，把 Board、CurveMgr、Ball、Bullet、Gun、关卡解析、过场管理、粒子、音效逐一移植成 JavaScript；单精度浮点、随机数消耗顺序都和原版一致。同一份录像在 Node.js 和浏览器里重放，76 关每一帧都完全相同。
 - <b>搜索：</b>纯 JavaScript，复制一份完整游戏状态约 0.15 毫秒，模拟一帧约 0.02 毫秒。每个工作进程独立重放录像到关卡开头再搜索。
-- <b>代码位置：</b>`js/sim.js`（游戏逻辑）、`tools/tas/v4.js`（瞄准扫描、清场 DP、估值、集束搜索）、`tools/tas/run_v4.js`（整局驱动与跨关选择）、`tas/movie.js`（录像）。
+- <b>代码位置：</b>`js/sim.js`（游戏逻辑）、`tools/tas/v4.js`（瞄准扫描、清场 DP、估值、集束搜索）、`tools/tas/run_v5.js`（整局驱动与跨关选择：推迟变体 + 完整前瞻；旧版 `run_v4.js` 保留）、`tas/movie.js`（录像）。
 
 <a name="z14"></a>
 
@@ -290,7 +300,7 @@ TAS 不背固定套路，每一关、每一种出球都重新计算。它在每�
 2. <b>统计画面会说话。</b>他们的通关统计是连锁 685、缝隙 61；我们 v3 是连锁 459、缝隙 478。这说明我们在追逐缝隙奖励的分数，而不是在高效地消球。这个对比直接推动了 v4 的重写。
 3. <b>CHAIN 连击奖励值得经营。</b>他们打出过连续 25 发都消球的连击。连击奖励每发 10n+50 分，越往后越值钱，所以 TAS 尽量做到“发发有效”，非必要不弃球。
 4. <b>金币不是装饰。</b>他们吃了 52 枚金币。后期一枚金币相当于目标分的 16%，这让我们把“打金币”放进了每一步的候选动作。
-5. <b>超长连锁是可以设计出来的。</b>他们能把链摆成 8~10 层连锁，一次吃光整条链，说明“边连锁边补色”在原版的发射频率下是做得到的。我们的最长连锁目前只有 5 层，这是 Claude TAS 还落后于人类 TAS 的地方，也是下一步最值得学习的方向。
+5. <b>超长连锁是可以设计出来的。</b>他们能把链摆成 8~10 层连锁，一次吃光整条链，说明“边连锁边补色”在原版的发射频率下是做得到的。我们的最长连锁目前只有 6 层，这是 Claude TAS 还落后于人类 TAS 的地方，也是下一步最值得学习的方向。
 6. <b>一把可靠的尺子。</b>他们每关结束后的统计画面给出了每一关的用时，让我们能逐关比较、找出最慢的关卡重点改进。我们甚至从录像里学会了判断一关的开始和结束：进度条由绿变黄就是开局，结束奖励的爆炸出现前 0.2 秒就是终点。
 
 Claude TAS 最后用了一种和他们很不一样的打法（尽早达标 + 精确的颜色控制）超过了这个纪录，但这条路是沿着他们留下的路标找到的。再次感谢两位作者。
@@ -303,9 +313,9 @@ Claude TAS 最后用了一种和他们很不一样的打法（尽早达标 + 精
 
 How a computer-made tool-assisted speedrun of Zuma Deluxe was planned and played
 
-| **8:51** | **11:22** | **−2:30** |
+| **8:12** | **11:22** | **−3:10** |
 |---|---|---|
-| Claude TAS total (TOTAL TIME on the final screen) | Previous world-record TAS ([QuocQuoc](https://www.youtube.com/@quocquoc444) & [DadoYep](https://www.youtube.com/@DadoYep), [video](#e10)) | about 22% faster |
+| Claude TAS total (TOTAL TIME on the final screen) | Previous world-record TAS ([QuocQuoc](https://www.youtube.com/@quocquoc444) & [DadoYep](https://www.youtube.com/@DadoYep), [video](#e10)) | about 28% faster |
 
 [1 What is this](#e1) · [2 Rules](#e2) · [3 Mechanics](#e3) · [4 Shooting](#e4) · [5 Scoring](#e5) · [6 Route planning](#e6) · [7 Decision tree & search](#e7) · [8 RNG & seed](#e8) · [9 Versions](#e9) · [10 vs the WR](#e10) · [11 Per-level times](#e11) · [12 How to watch](#e12) · [13 Implementation](#e13) · [14 Acknowledgements](#e14)
 
@@ -407,9 +417,9 @@ beam search: keep the 64 best states at each depth and expand them again, until 
 ```
 
 - A level takes about 30 shots and 40–50 search depths; 64 states × about 20 branches each means roughly 60,000 exactly simulated positions per search.
-- Each level runs <b>22 different settings</b> in parallel (strength of the colour penalty, delay range, settling time, random tie-breaking), and the best results are kept.
-- The best <b>4 distinct solutions</b> each get a quick trial run of the next level, and the TAS keeps the one where this level plus the next is fastest (see the next section).
-- All 76 levels took about 4 hours on 22 CPU cores, simulating well over a hundred million positions.
+- Each level runs <b>32 different settings</b> in parallel (strength of the colour penalty, delay range, settling time, random tie-breaking), and the best results are kept.
+- Cross-level choice in v5: take the <b>16 best distinct solutions</b> of this level, plus variants of the top 6 with their <b>final shot delayed by 1–20 frames</b> (re-aimed at the same slot), and drop duplicates that leave the next level with the same random state. Every candidate gets a quick trial run of the next level; the best 4 then get the whole 32-setting search on the next level, and the TAS keeps the one where this level plus the next is fastest. The chosen candidate's next-level results become that level's ensemble, so no search is thrown away (see the next section).
+- A full v5 run takes about 3 hours on 128 cores (4 × 32 = 128 full searches in parallel per level), roughly 800 million simulated positions in total.
 
 <a name="e8"></a>
 
@@ -417,9 +427,10 @@ beam search: keep the 64 best states at each depth and expand them again, until 
 
 The original has a single stream of random numbers (a Mersenne Twister). New track balls, loaded frog balls, power-ups, coins and even explosion particles all draw from it; every ball that pops uses up 240 random numbers. So:
 
-- <b>The seed</b> is like the time the game was started. The TAS scanned 100 seeds and picked number 64, which gave the fastest 1-1.
+- <b>The seed</b> is like the time the game was started. The TAS first scanned 100 seeds and picked number 64, which gave the fastest 1-1; since v4.4 seeds are re-scanned on the whole 76-level run, and seed 24 is used.
 - <b>Within a level:</b> firing one frame earlier or later, or popping one ball more or less, changes every colour that follows. The “fire 1–6 frames later” trick above uses this deliberately.
 - <b>Across levels:</b> the random state at the start of a level depends on exactly how the previous level ended. The fastest solution for this level can leave the next level with a bad start. So the TAS compares its top 4 solutions by trying the next level from each one, and keeps the best two-level total. In v3 this alone was worth over 90 seconds compared with simply taking the fastest solution for each level.
+- <b>Delaying the final shot (v5):</b> after the target is reached the power-up checks still draw random numbers every frame, so firing a level's final shot a few frames later gives the next level a completely different start. Many levels end when the last group's clearing animation finishes, so the delay often costs no time at all. The next level can differ by more than a second between starts, so v5 adds these variants as candidates, and most levels end up using one. Of the 39.8 s gained from 8:51 to 8:12, 34.7 s come from the clean-up after the target: the TAS learnt to pick next-level starts that are easy to clear.
 - The seed itself matters less than you might think. Re-running a level with different random settings varies the result by about 10%, but smarter play gained much more.
 
 <a name="e9"></a>
@@ -435,7 +446,10 @@ The original has a single stream of random numbers (a Mersenne Twister). New tra
 | v4.1 | 9:11 | same searcher, re-run as four parallel full runs (beams 32/48/64/96, cross-level candidates up to 16; 112 workers on 128 cores), best of four kept | gains from wide search + cross-level RNG-path variance; the four runs converge to 551-553 s, width saturates around 64 |
 | v4.2 | 9:02 | value function re-tuned on the bench: clear-cost weight alpha 1.5 + candidate list K 20 (the cascade planner and post-target delay fishing were both refuted on the same bench), combos lead the ensemble, M=16 cross-level choice, best of three parallel runs | re-weighing beats new machinery: shape the chain for the endgame while still scoring; three runs land at 548.8 / 542.1 / 542.7 s |
 | v4.3 | 8:53 | knob combinations stack: alpha 1.5 + K 20 + settle 90 + colorPen 2 (−449 bench ticks total) lead the ensemble; M=16; seeds re-scanned on a full-76-level criterion | combinations stack (unlike mu vs alpha, which cancel); 16 seeds spread 25 s at equal compute — seed choice is its own lever |
-| <b>v4.4</b> | <b>8:51</b> | seed re-scan finished on the full-76-level criterion (32 quick scans + full-power verification of the leaders); seed 24 wins | quick-scan rank and full-power results do not fully agree (seeds 4 and 23 did not hold up), but re-picking the seed still nets 1.2 s; picking by 1-1 speed alone really did cost time |
+| v4.4 | 8:51 | seed re-scan finished on the full-76-level criterion (32 quick scans + full-power verification of the leaders); seed 24 wins | quick-scan rank and full-power results do not fully agree (seeds 4 and 23 did not hold up), but re-picking the seed still nets 1.2 s; picking by 1-1 speed alone really did cost time |
+| <b>v5</b> | <b>8:12</b> | cross-level choice rewritten: final-shot-delay variants (1–20 frames, de-duplicated by the next level's start) join the candidates; a quick trial picks 4, each gets the whole 32-setting search on the next level, and the chosen results are carried over; the in-level searcher is unchanged; one full run on 128 cores | full-power lookahead alone only matched 8:51; with the delay variants −39.8 s, of which −34.7 s in the clean-up. The next level's start is the biggest lever, and delaying the final shot often costs nothing |
+
+v1–v4 by [9933fa](https://github.com/9933fa); v4.1–v5 by [AdamPlatin123](https://github.com/AdamPlatin123).
 
 ### Ideas that did not help
 
@@ -443,6 +457,11 @@ The original has a single stream of random numbers (a Mersenne Twister). New tra
 - Adding a lower bound for how long a running cascade will take: clearly worse (the TAS started avoiding cascades).
 - Learning the value function with a neural network trained on its own replays: a tie with the hand-written estimate.
 - Allowing a deliberate “wait, don't fire” option, or trying delays for every candidate: both worse.
+- Widening in-level delayed firing to 12 frames after the target: +975 ticks on the 22-level bench, paired per level (t = 3.2), so genuinely worse. Delays belong in the cross-level choice, not inside the beam.
+- Capping the children per parent in the beam (a diversity limit): a tie with the baseline.
+- Upgrading only the cross-level lookahead to the full search, without the delay variants: a tie with 8:51.
+- A wider variant pool (top 8 candidates, delays up to 24 frames, up to 116 candidates): a second run on the same seed landed at 8:19, not faster than 8:12 (one run varies by about ±6 s).
+- Waiting a few extra frames in the transitions to re-roll the random numbers: the transitions' random draws do not depend on timing, so the next level starts exactly the same.
 
 ### Misunderstandings fixed along the way
 
@@ -465,9 +484,10 @@ The original has a single stream of random numbers (a Mersenne Twister). New tra
 | Claude v4.1 | 9:11 | 517 | 11 | 520 | 14 | 7 |
 | Claude v4.2 | 9:02 | 494 | 20 | 521 | 14 | 5 |
 | Claude v4.3 | 8:53 | 519 | 9 | 479 | 16 | 7 |
-| <b>Claude v4.4</b> | <b>8:51</b> | 501 | 8 | 508 | 15 | 5 |
+| Claude v4.4 | 8:51 | 501 | 8 | 508 | 15 | 5 |
+| <b>Claude v5</b> | <b>8:12</b> | 501 | 6 | 489 | 14 | 6 |
 
-The two TAS runs play very differently. The human TAS builds huge 8–10 layer cascades that eat a whole chain at once. Claude's longest cascade is only 5 layers and it collects fewer coins, but it <b>reaches the target after 4.5 s on average</b> and then clears the rest quickly with precise colour control. Comparing all 76 levels one by one, Claude is faster on 70, within the same second on 4, and slower on 2 (9-6, 12-6).
+The two TAS runs play very differently. The human TAS builds huge 8–10 layer cascades that eat a whole chain at once. Claude's longest cascade is only 6 layers and it collects fewer coins, but it <b>reaches the target after 4.4 s on average</b> and then clears the rest quickly with precise colour control. Comparing all 76 levels one by one, Claude is faster on 74, within the same second on 1, and slower on 1 (8-7).
 
 > The WR's per-level times come from the stats screen shown after each level in its video. Like the original game, it shows whole seconds (rounded down). The data is in `tas/wr_times.js`, and Claude's times are rounded the same way when comparing.
 
@@ -477,83 +497,83 @@ The two TAS runs play very differently. The human TAS builds huge 8–10 layer c
 
 | Level | Map | Claude | World record | Result |
 |---|---|---|---|---|
-| 1-1 | Spiral of Doom | 5.11 | 0:06 | faster |
-| 1-2 | Osprey Talon | 4.24 | 0:05 | faster |
-| 1-3 | Riverbed Mosaic | 3.65 | 0:05 | faster |
-| 1-4 | Breath of Ehecatl | 5.66 | 0:07 | faster |
-| 1-5 | Dark Vortex | 7.50 | 0:08 | faster |
-| 2-1 | When Spirals Attack | 6.32 | 0:08 | faster |
-| 2-2 | Mud Slide | 4.75 | 0:06 | faster |
-| 2-3 | Rorschach | 5.32 | 0:07 | faster |
-| 2-4 | Mouth of Centeotl | 4.61 | 0:07 | faster |
-| 2-5 | Snake Pit | 6.55 | 0:07 | faster |
-| 3-1 | Landing Pad | 6.30 | 0:07 | faster |
-| 3-2 | Altar of Tlaloc | 7.36 | 0:10 | faster |
-| 3-3 | Codex of Mixtec | 7.31 | 0:08 | faster |
-| 3-4 | Shrine of Quetzalcoatl | 5.99 | 0:08 | faster |
-| 3-5 | Mirror Serpent | 6.86 | 0:09 | faster |
-| 4-1 | Spiral of Doom | 6.35 | 0:07 | faster |
-| 4-2 | Osprey Talon | 4.99 | 0:07 | faster |
-| 4-3 | Riverbed Mosaic | 6.32 | 0:08 | faster |
-| 4-4 | Breath of Ehecatl | 6.72 | 0:07 | faster |
-| 4-5 | Dark Vortex | 7.39 | 0:09 | faster |
-| 4-6 | Switchback | 6.45 | 0:09 | faster |
-| 5-1 | When Spirals Attack | 5.98 | 0:09 | faster |
-| 5-2 | Mud Slide | 5.92 | 0:09 | faster |
-| 5-3 | Rorschach | 7.71 | 0:09 | faster |
-| 5-4 | Mouth of Centeotl | 5.47 | 0:08 | faster |
-| 5-5 | Snake Pit | 7.13 | 0:10 | faster |
-| 5-6 | Sand Garden | 6.90 | 0:10 | faster |
-| 6-1 | Landing Pad | 5.92 | 0:08 | faster |
-| 6-2 | Altar of Tlaloc | 5.95 | 0:09 | faster |
-| 6-3 | Codex of Mixtec | 8.51 | 0:10 | faster |
-| 6-4 | Shrine of Quetzalcoatl | 7.17 | 0:09 | faster |
-| 6-5 | Mirror Serpent | 7.13 | 0:10 | faster |
-| 6-6 | Sun Stone | 7.25 | 0:09 | faster |
-| 7-1 | Spiral of Doom | 6.37 | 0:07 | faster |
-| 7-2 | Osprey Talon | 6.52 | 0:08 | faster |
-| 7-3 | Riverbed Mosaic | 6.15 | 0:07 | faster |
-| 7-4 | Breath of Ehecatl | 6.81 | 0:08 | faster |
-| 7-5 | Dark Vortex | 7.08 | 0:09 | faster |
-| 7-6 | Switchback | 6.86 | 0:07 | faster |
-| 7-7 | Long Range | 5.33 | 0:09 | faster |
-| 8-1 | When Spirals Attack | 7.00 | 0:07 | same second |
-| 8-2 | Mud Slide | 5.23 | 0:08 | faster |
-| 8-3 | Rorschach | 6.73 | 0:08 | faster |
-| 8-4 | Mouth of Centeotl | 7.86 | 0:09 | faster |
-| 8-5 | Snake Pit | 6.89 | 0:10 | faster |
-| 8-6 | Sand Garden | 7.85 | 0:09 | faster |
-| 8-7 | Lair of the Mud Snake | 7.97 | 0:07 | same second |
-| 9-1 | Landing Pad | 6.71 | 0:09 | faster |
-| 9-2 | Altar of Tlaloc | 7.44 | 0:08 | faster |
-| 9-3 | Codex of Mixtec | 7.11 | 0:08 | faster |
-| 9-4 | Shrine of Quetzalcoatl | 9.47 | 0:10 | faster |
-| 9-5 | Mirror Serpent | 8.93 | 0:10 | faster |
-| 9-6 | Sun Stone | 9.89 | 0:08 | slower |
-| 9-7 | Zumaic Exodus | 7.75 | 0:09 | faster |
-| 10-1 | Spiral of Doom | 7.39 | 0:09 | faster |
-| 10-2 | Osprey Talon | 7.18 | 0:08 | faster |
-| 10-3 | Riverbed Mosaic | 6.02 | 0:09 | faster |
-| 10-4 | Breath of Ehecatl | 9.73 | 0:09 | same second |
-| 10-5 | Dark Vortex | 8.53 | 0:10 | faster |
-| 10-6 | Switchback | 7.91 | 0:09 | faster |
-| 10-7 | Long Range | 8.06 | 0:09 | faster |
-| 11-1 | When Spirals Attack | 6.79 | 0:09 | faster |
-| 11-2 | Mud Slide | 7.52 | 0:10 | faster |
-| 11-3 | Rorschach | 8.49 | 0:09 | faster |
-| 11-4 | Mouth of Centeotl | 7.17 | 0:08 | faster |
-| 11-5 | Snake Pit | 6.69 | 0:11 | faster |
-| 11-6 | Sand Garden | 8.16 | 0:10 | faster |
-| 11-7 | Lair of the Mud Snake | 7.48 | 0:09 | faster |
-| 12-1 | Landing Pad | 8.50 | 0:09 | faster |
-| 12-2 | Altar of Tlaloc | 7.87 | 0:09 | faster |
-| 12-3 | Codex of Mixtec | 8.22 | 0:08 | same second |
-| 12-4 | Shrine of Quetzalcoatl | 8.12 | 0:10 | faster |
-| 12-5 | Mirror Serpent | 8.65 | 0:10 | faster |
-| 12-6 | Sun Stone | 10.26 | 0:08 | slower |
-| 12-7 | Zumaic Exodus | 5.92 | 0:10 | faster |
-| 13-1 | space | 8.55 | 0:15 | faster |
-| **Total** | | **8:51.95** | **11:22** | |
+| 1-1 | Spiral of Doom | 5.18 | 0:06 | faster |
+| 1-2 | Osprey Talon | 3.71 | 0:05 | faster |
+| 1-3 | Riverbed Mosaic | 3.70 | 0:05 | faster |
+| 1-4 | Breath of Ehecatl | 4.94 | 0:07 | faster |
+| 1-5 | Dark Vortex | 5.88 | 0:08 | faster |
+| 2-1 | When Spirals Attack | 5.69 | 0:08 | faster |
+| 2-2 | Mud Slide | 4.42 | 0:06 | faster |
+| 2-3 | Rorschach | 6.43 | 0:07 | faster |
+| 2-4 | Mouth of Centeotl | 5.99 | 0:07 | faster |
+| 2-5 | Snake Pit | 5.85 | 0:07 | faster |
+| 3-1 | Landing Pad | 6.24 | 0:07 | faster |
+| 3-2 | Altar of Tlaloc | 6.93 | 0:10 | faster |
+| 3-3 | Codex of Mixtec | 7.66 | 0:08 | faster |
+| 3-4 | Shrine of Quetzalcoatl | 5.55 | 0:08 | faster |
+| 3-5 | Mirror Serpent | 6.56 | 0:09 | faster |
+| 4-1 | Spiral of Doom | 5.64 | 0:07 | faster |
+| 4-2 | Osprey Talon | 4.29 | 0:07 | faster |
+| 4-3 | Riverbed Mosaic | 5.11 | 0:08 | faster |
+| 4-4 | Breath of Ehecatl | 6.69 | 0:07 | faster |
+| 4-5 | Dark Vortex | 6.75 | 0:09 | faster |
+| 4-6 | Switchback | 5.73 | 0:09 | faster |
+| 5-1 | When Spirals Attack | 6.40 | 0:09 | faster |
+| 5-2 | Mud Slide | 4.96 | 0:09 | faster |
+| 5-3 | Rorschach | 6.67 | 0:09 | faster |
+| 5-4 | Mouth of Centeotl | 6.27 | 0:08 | faster |
+| 5-5 | Snake Pit | 5.71 | 0:10 | faster |
+| 5-6 | Sand Garden | 6.95 | 0:10 | faster |
+| 6-1 | Landing Pad | 6.25 | 0:08 | faster |
+| 6-2 | Altar of Tlaloc | 6.53 | 0:09 | faster |
+| 6-3 | Codex of Mixtec | 5.76 | 0:10 | faster |
+| 6-4 | Shrine of Quetzalcoatl | 6.62 | 0:09 | faster |
+| 6-5 | Mirror Serpent | 7.87 | 0:10 | faster |
+| 6-6 | Sun Stone | 7.75 | 0:09 | faster |
+| 7-1 | Spiral of Doom | 5.35 | 0:07 | faster |
+| 7-2 | Osprey Talon | 4.46 | 0:08 | faster |
+| 7-3 | Riverbed Mosaic | 6.12 | 0:07 | faster |
+| 7-4 | Breath of Ehecatl | 6.05 | 0:08 | faster |
+| 7-5 | Dark Vortex | 7.69 | 0:09 | faster |
+| 7-6 | Switchback | 5.38 | 0:07 | faster |
+| 7-7 | Long Range | 6.94 | 0:09 | faster |
+| 8-1 | When Spirals Attack | 5.77 | 0:07 | faster |
+| 8-2 | Mud Slide | 6.04 | 0:08 | faster |
+| 8-3 | Rorschach | 6.84 | 0:08 | faster |
+| 8-4 | Mouth of Centeotl | 5.40 | 0:09 | faster |
+| 8-5 | Snake Pit | 7.40 | 0:10 | faster |
+| 8-6 | Sand Garden | 6.71 | 0:09 | faster |
+| 8-7 | Lair of the Mud Snake | 8.65 | 0:07 | slower |
+| 9-1 | Landing Pad | 6.68 | 0:09 | faster |
+| 9-2 | Altar of Tlaloc | 6.99 | 0:08 | faster |
+| 9-3 | Codex of Mixtec | 6.91 | 0:08 | faster |
+| 9-4 | Shrine of Quetzalcoatl | 6.98 | 0:10 | faster |
+| 9-5 | Mirror Serpent | 8.89 | 0:10 | faster |
+| 9-6 | Sun Stone | 6.88 | 0:08 | faster |
+| 9-7 | Zumaic Exodus | 6.63 | 0:09 | faster |
+| 10-1 | Spiral of Doom | 6.22 | 0:09 | faster |
+| 10-2 | Osprey Talon | 5.17 | 0:08 | faster |
+| 10-3 | Riverbed Mosaic | 6.46 | 0:09 | faster |
+| 10-4 | Breath of Ehecatl | 6.40 | 0:09 | faster |
+| 10-5 | Dark Vortex | 10.52 | 0:10 | same second |
+| 10-6 | Switchback | 5.70 | 0:09 | faster |
+| 10-7 | Long Range | 7.42 | 0:09 | faster |
+| 11-1 | When Spirals Attack | 7.44 | 0:09 | faster |
+| 11-2 | Mud Slide | 6.26 | 0:10 | faster |
+| 11-3 | Rorschach | 6.60 | 0:09 | faster |
+| 11-4 | Mouth of Centeotl | 6.80 | 0:08 | faster |
+| 11-5 | Snake Pit | 7.51 | 0:11 | faster |
+| 11-6 | Sand Garden | 8.01 | 0:10 | faster |
+| 11-7 | Lair of the Mud Snake | 7.31 | 0:09 | faster |
+| 12-1 | Landing Pad | 7.03 | 0:09 | faster |
+| 12-2 | Altar of Tlaloc | 6.67 | 0:09 | faster |
+| 12-3 | Codex of Mixtec | 7.37 | 0:08 | faster |
+| 12-4 | Shrine of Quetzalcoatl | 7.92 | 0:10 | faster |
+| 12-5 | Mirror Serpent | 8.09 | 0:10 | faster |
+| 12-6 | Sun Stone | 7.44 | 0:08 | faster |
+| 12-7 | Zumaic Exodus | 6.41 | 0:10 | faster |
+| 13-1 | space | 7.93 | 0:15 | faster |
+| **Total** | | **8:12.12** | **11:22** | |
 
 <a name="e12"></a>
 
@@ -569,7 +589,7 @@ The two TAS runs play very differently. The human TAS builds huge 8–10 layer c
 
 - <b>Replica:</b> following the CircleShootApp decompilation, Board, CurveMgr, Ball, Bullet, Gun, the level parser, the transition manager, particles and sounds were ported one by one to JavaScript, with single-precision floats and the same order of random-number use. The same replay gives identical frames for all 76 levels in Node.js and in the browser.
 - <b>Search:</b> plain JavaScript; copying the full game state takes about 0.15 ms and simulating one frame about 0.02 ms. Each worker process replays the recording up to the start of the level and then searches.
-- <b>Where the code is:</b> `js/sim.js` (game logic), `tools/tas/v4.js` (aim sweep, clean-up DP, value, beam search), `tools/tas/run_v4.js` (full-run driver and cross-level choice), `tas/movie.js` (the recording).
+- <b>Where the code is:</b> `js/sim.js` (game logic), `tools/tas/v4.js` (aim sweep, clean-up DP, value, beam search), `tools/tas/run_v5.js` (full-run driver and cross-level choice: delay variants + full-power lookahead; the older `run_v4.js` is kept), `tas/movie.js` (the recording).
 
 <a name="e14"></a>
 
@@ -581,7 +601,7 @@ Special thanks to <b>QuocQuoc</b> ([YouTube](https://www.youtube.com/@quocquoc44
 2. <b>The stats screen tells a story.</b> Their final stats were 685 combos and 61 gaps; our v3 had 459 combos and 478 gaps. We were chasing gap-bonus points instead of clearing balls efficiently. That comparison is what triggered the v4 rewrite.
 3. <b>The CHAIN bonus is worth nursing.</b> They reached a chain of 25 shots in a row that all cleared balls. The bonus is 10n+50 points per shot and keeps growing, so the TAS tries to make every shot count and only throws a ball away when it has to.
 4. <b>Coins are not decoration.</b> They collected 52 coins. In late levels one coin is 16% of the target score, so hitting the coin became one of the candidate moves at every step.
-5. <b>Huge cascades can be built on purpose.</b> They arrange the chain into 8–10 layer cascades that eat an entire chain at once, which proves that fixing colours while a cascade is running is possible at the original firing rate. Our longest cascade is still only 5 layers. This is where Claude TAS still trails the human TAS, and the most promising thing left to learn from them.
+5. <b>Huge cascades can be built on purpose.</b> They arrange the chain into 8–10 layer cascades that eat an entire chain at once, which proves that fixing colours while a cascade is running is possible at the original firing rate. Our longest cascade is still only 6 layers. This is where Claude TAS still trails the human TAS, and the most promising thing left to learn from them.
 6. <b>A reliable ruler.</b> The stats screen after each of their levels gave us a per-level time to compare against, so we could find our slowest levels and work on those first. We even learnt from their video how to read a level's start and end: the progress bar turning from green to yellow marks the start, and the level ends 0.2 s before the bonus explosions appear.
 
 Claude TAS ended up beating the record with a very different style (reach the target early, then precise colour control), but it found that path by following the signposts they left. Thanks again to both of them.

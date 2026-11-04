@@ -54,9 +54,9 @@ footer { text-align: center; color: var(--mute); font-size: 13px; padding: 20px;
 <!-- ============================================================== 中文 -->
 <section data-lang="zh">
 <div class="big">
-  <div><b id="zh-total">8:51</b><span>Claude TAS 总用时（通关画面 TOTAL TIME）</span></div>
+  <div><b id="zh-total">8:12</b><span>Claude TAS 总用时（通关画面 TOTAL TIME）</span></div>
   <div><b>11:22</b><span>此前世界纪录 TAS（<a href="https://www.youtube.com/@quocquoc444" target="_blank" rel="noopener">QuocQuoc</a> &amp; <a href="https://www.youtube.com/@DadoYep" target="_blank" rel="noopener">DadoYep</a>，<a href="#z10">视频</a>）</span></div>
-  <div><b id="zh-diff">−2:30</b><span>快了约 22%</span></div>
+  <div><b id="zh-diff">−3:10</b><span>快了约 28%</span></div>
 </div>
 
 <nav class="toc">
@@ -133,17 +133,18 @@ footer { text-align: center; color: var(--mute); font-size: 13px; padding: 20px;
 集束搜索：每一层只保留估值最好的 64 个局面，继续往下展开，直到通关</div>
 <ul>
 <li>一关大约 30 发、40~50 层；每层 64 个局面 × 每个约 20 个分支，一次搜索要真实模拟约 6 万个局面。</li>
-<li>每关同时跑 <b>22 套不同设置</b>（颜色惩罚强弱、延迟范围、观察时长、随机扰动），取所有结果里最好的几个。</li>
-<li>再对最好的 <b>4 个不同解</b>，各自往下一关快速试打，选“本关 + 下一关”加起来最快的那个（见下一节）。</li>
-<li>整个 76 关用 22 个 CPU 核心跑了大约 4 小时，总共模拟了上亿个局面。</li>
+<li>每关同时跑 <b>32 套不同设置</b>（颜色惩罚强弱、延迟范围、观察时长、随机扰动），取所有结果里最好的几个。</li>
+<li>v5 的跨关选择：取本关最好的 <b>16 个不同解</b>，再把其中前 6 个的<b>最后一发推迟 1~20 帧</b>（重新瞄准同一落点）得到一批变体，按“下一关开局的随机数状态”去重；每个候选先往下一关快速试打，挑出前 4 名，各用全部 32 套设置完整搜一遍下一关，选“本关 + 下一关”最快的。被选中候选的下一关结果直接留作下一关的集成，不浪费（见下一节）。</li>
+<li>v5 一整局在 128 核上约 3 小时（每关 4 × 32 = 128 个完整搜索并行），总共模拟了约 8 亿个局面。</li>
 </ul>
 
 <h2 id="z8">8　随机数与种子控制</h2>
 <p>原版只有一条随机数流（Mersenne Twister），轨道上的新球、青蛙装的球、道具、金币、甚至爆炸的粒子特效都从这里取数：每爆一颗球就要消耗 240 个随机数。所以：</p>
 <ul>
-<li><b>种子</b>相当于开机时间。TAS 扫描了 100 个种子，选了 1-1 最快的 64 号。</li>
+<li><b>种子</b>相当于开机时间。TAS 起初扫描了 100 个种子，选了 1-1 最快的 64 号；v4.4 起改按全 76 关口径重扫，用 24 号。</li>
 <li><b>关内：</b>开火早一帧晚一帧、消球多一颗少一颗，后面所有颜色都会变。上面说的“晚 1~6 帧开火”就是主动利用这一点。</li>
 <li><b>跨关：</b>每一关开局时的随机数状态，取决于上一关是怎么打完的。于是“本关最快”的解不一定最好——它可能让下一关开局很差。TAS 会比较本关前 4 个解，各自往下一关试打，选两关合计最快的。这一招在 v3 时就比“逐关最快”快了 90 多秒。</li>
+<li><b>推迟最后一发（v5）：</b>达标以后，道具判定每一帧都还在消耗随机数，所以把本关最后一发推迟几帧，下一关的开局就完全不同；而很多关的结束时间是由最后一组球的消除动画决定的，推迟最后一发往往一帧都不多花。下一关不同开局之间能差 1 秒以上，所以 v5 把这些变体也当作候选，76 关里多数关最后选的都是变体。8:51 → 8:12 省下的 39.8 秒里，有 34.7 秒来自达标后的清场：TAS 学会了给下一关挑一个好清场的开局。</li>
 <li>种子本身的影响反而是次要的：同一关换不同随机设置多跑几次，好坏能差 10% 左右，但“打法本身更聪明”带来的提升更大。</li>
 </ul>
 
@@ -157,14 +158,21 @@ footer { text-align: center; color: var(--mute); font-size: 13px; padding: 20px;
 <tr><td>v4.1</td><td>9:11</td><td class="l">搜索器不变，四路并行全量重跑（束宽 32/48/64/96、跨关候选至 16；128 核 112 进程），取四路最优</td><td class="l">宽搜索与跨关随机路径方差的收益；四路收敛于 551~553 s，宽度收益约在 64 饱和</td></tr>
 <tr><td>v4.2</td><td>9:02</td><td class="l">测试集重调估值：清场代价权重 alpha 1.5 + 候选数 K 20（连锁规划器/达标后延迟换色均在同一测试集被证伪），组合进集成前置，M=16 深跨关选择，三路并行取最优</td><td class="l">调权重比加机制值钱：一边攒分一边给清场整形；三路 548.8 / 542.1 / 542.7 s</td></tr>
 <tr><td>v4.3</td><td>8:53</td><td class="l">发现旋钮组合可叠加：alpha 1.5 + K 20 + settle 90 + colorPen 2（测试集累计 −449），前置进集成；M=16；种子开始按全 76 关口径重扫</td><td class="l">组合可以叠加（不像 mu 与 alpha 会互相抵消）；16 个种子同算力差 25 秒，选种是独立的大杠杆</td></tr>
-<tr><td><b>v4.4</b></td><td><b>8:51</b></td><td class="l">种子按全 76 关口径重扫完成（32 种快扫 + 头部种子全功率验证），24 号种胜出</td><td class="l">快扫排名与全功率结果不完全一致（种子 4/23 都未兑现），但重新选种仍净赚 1.2 秒；按 1-1 单关选种确实吃亏</td></tr>
+<tr><td>v4.4</td><td>8:51</td><td class="l">种子按全 76 关口径重扫完成（32 种快扫 + 头部种子全功率验证），24 号种胜出</td><td class="l">快扫排名与全功率结果不完全一致（种子 4/23 都未兑现），但重新选种仍净赚 1.2 秒；按 1-1 单关选种确实吃亏</td></tr>
+<tr><td><b>v5</b></td><td><b>8:12</b></td><td class="l">跨关选择重写：本关候选加入“最后一发推迟 1~20 帧”的变体（按下一关开局去重），快速试打筛出 4 个后各用全部 32 套设置完整搜下一关，被选中的结果直接留用；关内搜索器一行没改；128 核一路全量</td><td class="l">只加完整前瞻、不加变体的版本与 8:51 持平；加上变体后 −39.8 秒，其中清场 −34.7 秒。下一关开局才是最大的杠杆，而推迟最后一发常常不花本关时间</td></tr>
 </table>
+<p>v1–v4 由 <a href="https://github.com/9933fa" target="_blank" rel="noopener">9933fa</a> 完成；v4.1–v5 由 <a href="https://github.com/AdamPlatin123" target="_blank" rel="noopener">AdamPlatin123</a> 完成。</p>
 <h3>试过但没用的想法</h3>
 <ul>
 <li>专门规划长连锁并估计“撞出入口”的球：在测试集上没有稳定收益。</li>
 <li>给“正在进行的连锁要持续多久”加时间下限：明显变差（会让 TAS 躲开连锁）。</li>
 <li>用神经网络学习估值（用自己的录像训练）：和手写估值打平。</li>
 <li>允许主动“等一等不开火”、对所有候选都试延迟：都变差。</li>
+<li>达标后在关内把延迟开火放宽到 12 帧：22 关测试集逐关配对 +975 帧（t=3.2），确实变差——延迟要放在跨关选择里用，不要放进关内的集束搜索。</li>
+<li>限制集束里每个父节点的子节点数（多样性上限）：与基线持平。</li>
+<li>只把跨关前瞻升级为完整搜索、不加推迟变体：与 8:51 持平。</li>
+<li>更宽的变体池（前 8 个候选、推迟到 24 帧、候选上限 116）：同种子再跑一局 8:19，没有比 8:12 更快（单局噪声约 ±6 秒）。</li>
+<li>在过场里多等几帧换随机数：过场的随机数消耗与时机无关，下一关开局完全不变。</li>
 </ul>
 <h3>一路上修掉的“理解错误”</h3>
 <ul>
@@ -184,9 +192,10 @@ footer { text-align: center; color: var(--mute); font-size: 13px; padding: 20px;
 <tr><td class="l">Claude v4.1</td><td>9:11</td><td>517</td><td>11</td><td>520</td><td>14</td><td>7</td></tr>
 <tr><td class="l">Claude v4.2</td><td>9:02</td><td>494</td><td>20</td><td>521</td><td>14</td><td>5</td></tr>
 <tr><td class="l">Claude v4.3</td><td>8:53</td><td>519</td><td>9</td><td>479</td><td>16</td><td>7</td></tr>
-<tr><td class="l"><b>Claude v4.4</b></td><td><b>8:51</b></td><td>501</td><td>8</td><td>508</td><td>15</td><td>5</td></tr>
+<tr><td class="l">Claude v4.4</td><td>8:51</td><td>501</td><td>8</td><td>508</td><td>15</td><td>5</td></tr>
+<tr><td class="l"><b>Claude v5</b></td><td><b>8:12</b></td><td>501</td><td>6</td><td>489</td><td>14</td><td>6</td></tr>
 </table>
-<p>两份 TAS 的风格完全不同。人类 TAS 擅长摆出 8~10 层的超长连锁，一次把整条链吃光；Claude TAS 的连锁最长只有 5 层、金币也拿得少，但它<b>平均 4.5 秒就达标</b>，然后用精确的颜色控制快速清场。全部 76 关逐关比较，Claude 更快 70 关、同一秒 4 关、更慢 2 关（9-6、12-6）。</p>
+<p>两份 TAS 的风格完全不同。人类 TAS 擅长摆出 8~10 层的超长连锁，一次把整条链吃光；Claude TAS 的连锁最长只有 6 层、金币也拿得少，但它<b>平均 4.4 秒就达标</b>，然后用精确的颜色控制快速清场。全部 76 关逐关比较，Claude 更快 74 关、同一秒 1 关、更慢 1 关（8-7）。</p>
 <div class="note">世界纪录的每关时间取自录像里每关结束后的统计画面，按原版规则显示为整秒（向下取整），数据在 <code>tas/wr_times.js</code>。比较时把 Claude 的用时也按同样规则取整。</div>
 
 <h2 id="z11">11　每关成绩</h2>
@@ -203,7 +212,7 @@ footer { text-align: center; color: var(--mute); font-size: 13px; padding: 20px;
 <ul>
 <li><b>复刻：</b>依据 CircleShootApp 反编译源码，把 Board、CurveMgr、Ball、Bullet、Gun、关卡解析、过场管理、粒子、音效逐一移植成 JavaScript；单精度浮点、随机数消耗顺序都和原版一致。同一份录像在 Node.js 和浏览器里重放，76 关每一帧都完全相同。</li>
 <li><b>搜索：</b>纯 JavaScript，复制一份完整游戏状态约 0.15 毫秒，模拟一帧约 0.02 毫秒。每个工作进程独立重放录像到关卡开头再搜索。</li>
-<li><b>代码位置：</b><code>js/sim.js</code>（游戏逻辑）、<code>tools/tas/v4.js</code>（瞄准扫描、清场 DP、估值、集束搜索）、<code>tools/tas/run_v4.js</code>（整局驱动与跨关选择）、<code>tas/movie.js</code>（录像）。</li>
+<li><b>代码位置：</b><code>js/sim.js</code>（游戏逻辑）、<code>tools/tas/v4.js</code>（瞄准扫描、清场 DP、估值、集束搜索）、<code>tools/tas/run_v5.js</code>（整局驱动与跨关选择：推迟变体 + 完整前瞻；旧版 <code>run_v4.js</code> 保留）、<code>tas/movie.js</code>（录像）。</li>
 </ul>
 
 <h2 id="z14">14　致谢：从世界纪录 TAS 学到的东西</h2>
@@ -213,7 +222,7 @@ footer { text-align: center; color: var(--mute); font-size: 13px; padding: 20px;
 <li><b>统计画面会说话。</b>他们的通关统计是连锁 685、缝隙 61；我们 v3 是连锁 459、缝隙 478。这说明我们在追逐缝隙奖励的分数，而不是在高效地消球。这个对比直接推动了 v4 的重写。</li>
 <li><b>CHAIN 连击奖励值得经营。</b>他们打出过连续 25 发都消球的连击。连击奖励每发 10n+50 分，越往后越值钱，所以 TAS 尽量做到“发发有效”，非必要不弃球。</li>
 <li><b>金币不是装饰。</b>他们吃了 52 枚金币。后期一枚金币相当于目标分的 16%，这让我们把“打金币”放进了每一步的候选动作。</li>
-<li><b>超长连锁是可以设计出来的。</b>他们能把链摆成 8~10 层连锁，一次吃光整条链，说明“边连锁边补色”在原版的发射频率下是做得到的。我们的最长连锁目前只有 5 层，这是 Claude TAS 还落后于人类 TAS 的地方，也是下一步最值得学习的方向。</li>
+<li><b>超长连锁是可以设计出来的。</b>他们能把链摆成 8~10 层连锁，一次吃光整条链，说明“边连锁边补色”在原版的发射频率下是做得到的。我们的最长连锁目前只有 6 层，这是 Claude TAS 还落后于人类 TAS 的地方，也是下一步最值得学习的方向。</li>
 <li><b>一把可靠的尺子。</b>他们每关结束后的统计画面给出了每一关的用时，让我们能逐关比较、找出最慢的关卡重点改进。我们甚至从录像里学会了判断一关的开始和结束：进度条由绿变黄就是开局，结束奖励的爆炸出现前 0.2 秒就是终点。</li>
 </ol>
 <p>Claude TAS 最后用了一种和他们很不一样的打法（尽早达标 + 精确的颜色控制）超过了这个纪录，但这条路是沿着他们留下的路标找到的。再次感谢两位作者。</p>
@@ -222,9 +231,9 @@ footer { text-align: center; color: var(--mute); font-size: 13px; padding: 20px;
 <!-- ============================================================== English -->
 <section data-lang="en">
 <div class="big">
-  <div><b id="en-total">8:51</b><span>Claude TAS total (TOTAL TIME on the final screen)</span></div>
+  <div><b id="en-total">8:12</b><span>Claude TAS total (TOTAL TIME on the final screen)</span></div>
   <div><b>11:22</b><span>Previous world-record TAS (<a href="https://www.youtube.com/@quocquoc444" target="_blank" rel="noopener">QuocQuoc</a> &amp; <a href="https://www.youtube.com/@DadoYep" target="_blank" rel="noopener">DadoYep</a>, <a href="#e10">video</a>)</span></div>
-  <div><b id="en-diff">−2:30</b><span>about 22% faster</span></div>
+  <div><b id="en-diff">−3:10</b><span>about 28% faster</span></div>
 </div>
 
 <nav class="toc">
@@ -301,17 +310,18 @@ each branch is simulated exactly up to the next moment the frog can fire; the ba
 beam search: keep the 64 best states at each depth and expand them again, until the level is won</div>
 <ul>
 <li>A level takes about 30 shots and 40–50 search depths; 64 states × about 20 branches each means roughly 60,000 exactly simulated positions per search.</li>
-<li>Each level runs <b>22 different settings</b> in parallel (strength of the colour penalty, delay range, settling time, random tie-breaking), and the best results are kept.</li>
-<li>The best <b>4 distinct solutions</b> each get a quick trial run of the next level, and the TAS keeps the one where this level plus the next is fastest (see the next section).</li>
-<li>All 76 levels took about 4 hours on 22 CPU cores, simulating well over a hundred million positions.</li>
+<li>Each level runs <b>32 different settings</b> in parallel (strength of the colour penalty, delay range, settling time, random tie-breaking), and the best results are kept.</li>
+<li>Cross-level choice in v5: take the <b>16 best distinct solutions</b> of this level, plus variants of the top 6 with their <b>final shot delayed by 1–20 frames</b> (re-aimed at the same slot), and drop duplicates that leave the next level with the same random state. Every candidate gets a quick trial run of the next level; the best 4 then get the whole 32-setting search on the next level, and the TAS keeps the one where this level plus the next is fastest. The chosen candidate's next-level results become that level's ensemble, so no search is thrown away (see the next section).</li>
+<li>A full v5 run takes about 3 hours on 128 cores (4 × 32 = 128 full searches in parallel per level), roughly 800 million simulated positions in total.</li>
 </ul>
 
 <h2 id="e8">8　Random numbers and seed control</h2>
 <p>The original has a single stream of random numbers (a Mersenne Twister). New track balls, loaded frog balls, power-ups, coins and even explosion particles all draw from it; every ball that pops uses up 240 random numbers. So:</p>
 <ul>
-<li><b>The seed</b> is like the time the game was started. The TAS scanned 100 seeds and picked number 64, which gave the fastest 1-1.</li>
+<li><b>The seed</b> is like the time the game was started. The TAS first scanned 100 seeds and picked number 64, which gave the fastest 1-1; since v4.4 seeds are re-scanned on the whole 76-level run, and seed 24 is used.</li>
 <li><b>Within a level:</b> firing one frame earlier or later, or popping one ball more or less, changes every colour that follows. The “fire 1–6 frames later” trick above uses this deliberately.</li>
 <li><b>Across levels:</b> the random state at the start of a level depends on exactly how the previous level ended. The fastest solution for this level can leave the next level with a bad start. So the TAS compares its top 4 solutions by trying the next level from each one, and keeps the best two-level total. In v3 this alone was worth over 90 seconds compared with simply taking the fastest solution for each level.</li>
+<li><b>Delaying the final shot (v5):</b> after the target is reached the power-up checks still draw random numbers every frame, so firing a level's final shot a few frames later gives the next level a completely different start. Many levels end when the last group's clearing animation finishes, so the delay often costs no time at all. The next level can differ by more than a second between starts, so v5 adds these variants as candidates, and most levels end up using one. Of the 39.8 s gained from 8:51 to 8:12, 34.7 s come from the clean-up after the target: the TAS learnt to pick next-level starts that are easy to clear.</li>
 <li>The seed itself matters less than you might think. Re-running a level with different random settings varies the result by about 10%, but smarter play gained much more.</li>
 </ul>
 
@@ -325,14 +335,21 @@ beam search: keep the 64 best states at each depth and expand them again, until 
 <tr><td>v4.1</td><td>9:11</td><td class="l">same searcher, re-run as four parallel full runs (beams 32/48/64/96, cross-level candidates up to 16; 112 workers on 128 cores), best of four kept</td><td class="l">gains from wide search + cross-level RNG-path variance; the four runs converge to 551-553 s, width saturates around 64</td></tr>
 <tr><td>v4.2</td><td>9:02</td><td class="l">value function re-tuned on the bench: clear-cost weight alpha 1.5 + candidate list K 20 (the cascade planner and post-target delay fishing were both refuted on the same bench), combos lead the ensemble, M=16 cross-level choice, best of three parallel runs</td><td class="l">re-weighing beats new machinery: shape the chain for the endgame while still scoring; three runs land at 548.8 / 542.1 / 542.7 s</td></tr>
 <tr><td>v4.3</td><td>8:53</td><td class="l">knob combinations stack: alpha 1.5 + K 20 + settle 90 + colorPen 2 (−449 bench ticks total) lead the ensemble; M=16; seeds re-scanned on a full-76-level criterion</td><td class="l">combinations stack (unlike mu vs alpha, which cancel); 16 seeds spread 25 s at equal compute — seed choice is its own lever</td></tr>
-<tr><td><b>v4.4</b></td><td><b>8:51</b></td><td class="l">seed re-scan finished on the full-76-level criterion (32 quick scans + full-power verification of the leaders); seed 24 wins</td><td class="l">quick-scan rank and full-power results do not fully agree (seeds 4 and 23 did not hold up), but re-picking the seed still nets 1.2 s; picking by 1-1 speed alone really did cost time</td></tr>
+<tr><td>v4.4</td><td>8:51</td><td class="l">seed re-scan finished on the full-76-level criterion (32 quick scans + full-power verification of the leaders); seed 24 wins</td><td class="l">quick-scan rank and full-power results do not fully agree (seeds 4 and 23 did not hold up), but re-picking the seed still nets 1.2 s; picking by 1-1 speed alone really did cost time</td></tr>
+<tr><td><b>v5</b></td><td><b>8:12</b></td><td class="l">cross-level choice rewritten: final-shot-delay variants (1–20 frames, de-duplicated by the next level's start) join the candidates; a quick trial picks 4, each gets the whole 32-setting search on the next level, and the chosen results are carried over; the in-level searcher is unchanged; one full run on 128 cores</td><td class="l">full-power lookahead alone only matched 8:51; with the delay variants −39.8 s, of which −34.7 s in the clean-up. The next level's start is the biggest lever, and delaying the final shot often costs nothing</td></tr>
 </table>
+<p>v1–v4 by <a href="https://github.com/9933fa" target="_blank" rel="noopener">9933fa</a>; v4.1–v5 by <a href="https://github.com/AdamPlatin123" target="_blank" rel="noopener">AdamPlatin123</a>.</p>
 <h3>Ideas that did not help</h3>
 <ul>
 <li>Planning long cascades explicitly and estimating which balls get pushed out of the entrance: no consistent gain on the test levels.</li>
 <li>Adding a lower bound for how long a running cascade will take: clearly worse (the TAS started avoiding cascades).</li>
 <li>Learning the value function with a neural network trained on its own replays: a tie with the hand-written estimate.</li>
 <li>Allowing a deliberate “wait, don't fire” option, or trying delays for every candidate: both worse.</li>
+<li>Widening in-level delayed firing to 12 frames after the target: +975 ticks on the 22-level bench, paired per level (t = 3.2), so genuinely worse. Delays belong in the cross-level choice, not inside the beam.</li>
+<li>Capping the children per parent in the beam (a diversity limit): a tie with the baseline.</li>
+<li>Upgrading only the cross-level lookahead to the full search, without the delay variants: a tie with 8:51.</li>
+<li>A wider variant pool (top 8 candidates, delays up to 24 frames, up to 116 candidates): a second run on the same seed landed at 8:19, not faster than 8:12 (one run varies by about ±6 s).</li>
+<li>Waiting a few extra frames in the transitions to re-roll the random numbers: the transitions' random draws do not depend on timing, so the next level starts exactly the same.</li>
 </ul>
 <h3>Misunderstandings fixed along the way</h3>
 <ul>
@@ -352,9 +369,10 @@ All per-level comparison times in this project come from that video. What we lea
 <tr><td class="l">Claude v4.1</td><td>9:11</td><td>517</td><td>11</td><td>520</td><td>14</td><td>7</td></tr>
 <tr><td class="l">Claude v4.2</td><td>9:02</td><td>494</td><td>20</td><td>521</td><td>14</td><td>5</td></tr>
 <tr><td class="l">Claude v4.3</td><td>8:53</td><td>519</td><td>9</td><td>479</td><td>16</td><td>7</td></tr>
-<tr><td class="l"><b>Claude v4.4</b></td><td><b>8:51</b></td><td>501</td><td>8</td><td>508</td><td>15</td><td>5</td></tr>
+<tr><td class="l">Claude v4.4</td><td>8:51</td><td>501</td><td>8</td><td>508</td><td>15</td><td>5</td></tr>
+<tr><td class="l"><b>Claude v5</b></td><td><b>8:12</b></td><td>501</td><td>6</td><td>489</td><td>14</td><td>6</td></tr>
 </table>
-<p>The two TAS runs play very differently. The human TAS builds huge 8–10 layer cascades that eat a whole chain at once. Claude's longest cascade is only 5 layers and it collects fewer coins, but it <b>reaches the target after 4.5 s on average</b> and then clears the rest quickly with precise colour control. Comparing all 76 levels one by one, Claude is faster on 70, within the same second on 4, and slower on 2 (9-6, 12-6).</p>
+<p>The two TAS runs play very differently. The human TAS builds huge 8–10 layer cascades that eat a whole chain at once. Claude's longest cascade is only 6 layers and it collects fewer coins, but it <b>reaches the target after 4.4 s on average</b> and then clears the rest quickly with precise colour control. Comparing all 76 levels one by one, Claude is faster on 74, within the same second on 1, and slower on 1 (8-7).</p>
 <div class="note">The WR's per-level times come from the stats screen shown after each level in its video. Like the original game, it shows whole seconds (rounded down). The data is in <code>tas/wr_times.js</code>, and Claude's times are rounded the same way when comparing.</div>
 
 <h2 id="e11">11　Per-level times</h2>
@@ -371,7 +389,7 @@ All per-level comparison times in this project come from that video. What we lea
 <ul>
 <li><b>Replica:</b> following the CircleShootApp decompilation, Board, CurveMgr, Ball, Bullet, Gun, the level parser, the transition manager, particles and sounds were ported one by one to JavaScript, with single-precision floats and the same order of random-number use. The same replay gives identical frames for all 76 levels in Node.js and in the browser.</li>
 <li><b>Search:</b> plain JavaScript; copying the full game state takes about 0.15 ms and simulating one frame about 0.02 ms. Each worker process replays the recording up to the start of the level and then searches.</li>
-<li><b>Where the code is:</b> <code>js/sim.js</code> (game logic), <code>tools/tas/v4.js</code> (aim sweep, clean-up DP, value, beam search), <code>tools/tas/run_v4.js</code> (full-run driver and cross-level choice), <code>tas/movie.js</code> (the recording).</li>
+<li><b>Where the code is:</b> <code>js/sim.js</code> (game logic), <code>tools/tas/v4.js</code> (aim sweep, clean-up DP, value, beam search), <code>tools/tas/run_v5.js</code> (full-run driver and cross-level choice: delay variants + full-power lookahead; the older <code>run_v4.js</code> is kept), <code>tas/movie.js</code> (the recording).</li>
 </ul>
 
 <h2 id="e14">14　Acknowledgements: what we learnt from the world-record TAS</h2>
@@ -381,13 +399,13 @@ All per-level comparison times in this project come from that video. What we lea
 <li><b>The stats screen tells a story.</b> Their final stats were 685 combos and 61 gaps; our v3 had 459 combos and 478 gaps. We were chasing gap-bonus points instead of clearing balls efficiently. That comparison is what triggered the v4 rewrite.</li>
 <li><b>The CHAIN bonus is worth nursing.</b> They reached a chain of 25 shots in a row that all cleared balls. The bonus is 10n+50 points per shot and keeps growing, so the TAS tries to make every shot count and only throws a ball away when it has to.</li>
 <li><b>Coins are not decoration.</b> They collected 52 coins. In late levels one coin is 16% of the target score, so hitting the coin became one of the candidate moves at every step.</li>
-<li><b>Huge cascades can be built on purpose.</b> They arrange the chain into 8–10 layer cascades that eat an entire chain at once, which proves that fixing colours while a cascade is running is possible at the original firing rate. Our longest cascade is still only 5 layers. This is where Claude TAS still trails the human TAS, and the most promising thing left to learn from them.</li>
+<li><b>Huge cascades can be built on purpose.</b> They arrange the chain into 8–10 layer cascades that eat an entire chain at once, which proves that fixing colours while a cascade is running is possible at the original firing rate. Our longest cascade is still only 6 layers. This is where Claude TAS still trails the human TAS, and the most promising thing left to learn from them.</li>
 <li><b>A reliable ruler.</b> The stats screen after each of their levels gave us a per-level time to compare against, so we could find our slowest levels and work on those first. We even learnt from their video how to read a level's start and end: the progress bar turning from green to yellow marks the start, and the level ends 0.2 s before the bonus explosions appear.</li>
 </ol>
 <p>Claude TAS ended up beating the record with a very different style (reach the target early, then precise colour control), but it found that path by following the signposts they left. Thanks again to both of them.</p>
 </section>
 </main>
-<footer>Claude TAS · Zuma Deluxe replica · seed 64</footer>
+<footer>Claude TAS · Zuma Deluxe replica · seed 24</footer>
 
 <script src="../tas/movie.js"></script>
 <script src="../tas/wr_times.js"></script>
